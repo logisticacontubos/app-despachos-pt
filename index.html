@@ -564,22 +564,18 @@ async function pintarDetalle(idPedido){
             ${e.Duracion_Cargue_Min ? `<div class="entrega-date">Cargue: ${e.Hora_Inicio_Cargue} → ${e.Hora_Fin_Cargue} (${e.Duracion_Cargue_Min} min)</div>` : ''}</div>
             <div class="entrega-date">${e.Fecha_Entrega}</div>
           </div>`).join('') : '<div class="entrega-item">Aún no se registran entregas.</div>'}
-
-        ${(esAtrasado(o) && o.Estado!=='Completado') ? `
-          <div class="reason-box">
-            <div class="title">⚠ Despacho no cumplido — requiere razón</div>
-            ${canEdit ? `
-              <textarea placeholder="Ej: Transporte reasignado, se despacha mañana." id="razon-${idPedido}"></textarea>
-              <label style="margin-top:8px;">Nueva fecha</label>
-              <input type="date" id="nuevaFecha-${idPedido}" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;">
-              <button style="margin-top:8px;background:var(--ink);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;width:100%;" onclick="guardarRazon('${idPedido}')">Guardar razón y reprogramar</button>
-            ` : `<div class="readonly-note">Pedido atrasado, en espera de razón.</div>`}
-          </div>` : ''}
       </div>
       <div>
         <h4>Registrar nueva entrega</h4>
         ${canEdit ? `
           <div class="add-entrega">
+            ${(esAtrasado(o) && o.Estado!=='Completado') ? `
+              <div style="background:var(--danger-soft);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+                <label style="color:var(--danger);">⚠ Despacho atrasado — razón</label>
+                <textarea placeholder="Ej: Transporte reasignado, se despacha mañana." id="razon-${idPedido}" style="margin-bottom:8px;"></textarea>
+                <button type="button" style="background:var(--danger);color:white;border:none;padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;width:100%;" onclick="guardarRazon('${idPedido}')">Guardar razón</button>
+              </div>
+            ` : ''}
             <label>Control de tiempo de cargue</label>
             <div style="margin-bottom:12px;" id="cargueBtnWrap-${idPedido}">
               <button type="button" id="btnIniciar-${idPedido}" onclick="iniciarCargue('${idPedido}')" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>
@@ -664,17 +660,17 @@ async function registrarEntrega(idPedido){
 
 async function guardarRazon(idPedido){
   const razon = document.getElementById('razon-'+idPedido).value.trim();
-  const nuevaFecha = document.getElementById('nuevaFecha-'+idPedido).value;
   if(!razon){ showToast('Escribe una razón antes de guardar.'); return; }
   const list = pedidosCache[currentCompany]||[];
   const o = list.find(p=>p.ID_Pedido===idPedido);
-  const nuevaFechaFmt = nuevaFecha ? nuevaFecha.split('-').reverse().join('/') : '';
 
   showToast('Guardando razón...');
   try{
-    const data = await llamarAPI({ accion:'registrarRazonAtraso', idPedido, fechaProgramadaOriginal:o.Fecha_Entrega, razon, registradoPor:currentUser.nombre, nuevaFechaProgramada:nuevaFechaFmt });
-    if(data.ok){ showToast('✅ Razón guardada, pedido reprogramado.'); await cargarPedidos(); }
-    else { showToast('Error: '+data.error); }
+    const data = await llamarAPI({ accion:'registrarRazonAtraso', idPedido, fechaProgramadaOriginal:o.Fecha_Entrega, razon, registradoPor:currentUser.nombre });
+    if(data.ok){
+      showToast('✅ Razón guardada.');
+      document.getElementById('razon-'+idPedido).value = '';
+    } else { showToast('Error: '+data.error); }
   } catch(err){ showToast('Error de conexión: '+err.message); }
 }
 
