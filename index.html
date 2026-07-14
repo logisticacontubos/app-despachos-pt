@@ -632,16 +632,46 @@ function toggleNoProgramado(){
 
 // ---------- RENDER ----------
 // ---------- HISTORIAL (vista completa, agrupada por fecha, solo finalizados) ----------
+let historialCompletadosCache = [];
+
 function renderHistorial(list){
   document.getElementById('viewingLabel').innerHTML = `🕘 Historial de ${currentCompany} <a href="#" onclick="toggleHistorialPanel();return false;" style="color:var(--ink-soft);text-decoration:underline;margin-left:6px;">volver a hoy</a>`;
   document.getElementById('futuroCount').textContent = '';
   document.getElementById('futuroMenu').style.display = 'none';
 
-  const completados = list.filter(o=>o.Estado==='Completado');
+  historialCompletadosCache = list.filter(o=>o.Estado==='Completado');
   const container = document.getElementById('orderList');
 
-  if(completados.length===0){
+  if(historialCompletadosCache.length===0){
     container.innerHTML = `<div class="empty"><div class="big">🕘</div>Aún no hay pedidos completados para ${currentCompany}.</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <input type="text" id="historialSearch" placeholder="🔍 Buscar por OC, PVT o razón social..." oninput="filtrarHistorial()"
+        style="width:100%;max-width:420px;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-family:inherit;background:var(--card);box-shadow:var(--shadow);">
+    </div>
+    <div id="historialResultados"></div>
+  `;
+  pintarResultadosHistorial(historialCompletadosCache);
+}
+
+function filtrarHistorial(){
+  const q = document.getElementById('historialSearch').value.trim().toLowerCase();
+  if(!q){ pintarResultadosHistorial(historialCompletadosCache); return; }
+  const filtrados = historialCompletadosCache.filter(o=>
+    String(o.OC_Cliente||'').toLowerCase().includes(q) ||
+    String(o.PVT||'').toLowerCase().includes(q) ||
+    String(o.Razon_Social_Cliente||'').toLowerCase().includes(q)
+  );
+  pintarResultadosHistorial(filtrados);
+}
+
+function pintarResultadosHistorial(completados){
+  const resultadosEl = document.getElementById('historialResultados');
+  if(completados.length===0){
+    resultadosEl.innerHTML = `<div class="empty"><div class="big">🔍</div>No se encontraron pedidos completados con ese criterio.</div>`;
     return;
   }
 
@@ -660,7 +690,7 @@ function renderHistorial(list){
     return db - da; // más reciente primero
   });
 
-  container.innerHTML = fechasOrdenadas.map(fecha=>`
+  resultadosEl.innerHTML = fechasOrdenadas.map(fecha=>`
     <div style="margin-bottom:22px;">
       <div style="font-size:12.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">${dayTabLabel(fecha)} · ${grupos[fecha].length} pedido${grupos[fecha].length===1?'':'s'}</div>
       ${grupos[fecha].map(o=>{
@@ -674,7 +704,7 @@ function renderHistorial(list){
               <div>
                 <div class="client">${o.Razon_Social_Cliente}</div>
                 <div class="ref">${o.Referencia}</div>
-                <div class="oc" style="margin-top:4px;">OC ${o.OC_Cliente} · ${o.Ciudad}</div>
+                <div class="oc" style="margin-top:4px;">OC ${o.OC_Cliente} · PVT ${o.PVT||'-'} · ${o.Ciudad}</div>
               </div>
               <div style="text-align:right;">
                 <div class="qty">${cantidadTxt}</div>
