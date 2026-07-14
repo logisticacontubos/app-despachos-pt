@@ -289,13 +289,7 @@
         <button class="upload-btn" onclick="toggleFuturoMenu()">📅 Próximos días <span id="futuroCount" style="color:var(--magenta);font-weight:700;"></span></button>
         <div id="futuroMenu" style="display:none;position:absolute;right:0;top:40px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px;min-width:190px;z-index:20;"></div>
       </div>
-      <button class="upload-btn" onclick="toggleHistorialPanel()">🕘 Historial</button>
-    </div>
-  </div>
-
-  <div class="order" id="historialPanel" style="display:none;margin-bottom:14px;">
-    <div class="detail-inner" style="padding:16px 20px;grid-template-columns:1fr;">
-      <div><h4>Historial (días anteriores ya completados)</h4><div id="historialList"></div></div>
+      <button class="upload-btn" id="btnHistorial" onclick="toggleHistorialPanel()">🕘 Historial</button>
     </div>
   </div>
 
@@ -478,7 +472,9 @@ async function setCompany(c){
   currentDayFilter = 'hoy';
   currentFilter = 'principal';
   document.querySelectorAll('.stat-card').forEach(card=>card.classList.remove('tab-active'));
-  document.getElementById('historialPanel').style.display='none';
+  historialActivo = false;
+  const btnHist = document.getElementById('btnHistorial');
+  if(btnHist) btnHist.classList.remove('active');
   document.getElementById('futuroMenu').style.display='none';
   setUpCompanyButtons();
   await cargarPedidos();
@@ -582,16 +578,12 @@ function toggleFuturoMenu(){
   const m = document.getElementById('futuroMenu');
   m.style.display = (m.style.display==='none') ? 'block' : 'none';
 }
+let historialActivo = false;
 function toggleHistorialPanel(){
-  const p = document.getElementById('historialPanel');
-  const list = (pedidosCache[currentCompany]||[]).filter(o=>dayCategory(o)==='historial');
-  document.getElementById('historialList').innerHTML = list.length ? list.map(o=>`
-    <div class="entrega-item">
-      <div><div style="font-weight:600;">${o.Razon_Social_Cliente} <span style="font-weight:400;color:var(--ink-soft);">— ${o.Referencia}</span></div>
-      <div class="entrega-date">OC ${o.OC_Cliente} · ${o.Fecha_Entrega} · ${Number(o.Cantidad_Entregada).toLocaleString()} unds completadas</div></div>
-      <span class="status-pill status-Completado">Completado</span>
-    </div>`).join('') : `<div class="readonly-note">Aún no hay pedidos completados de días anteriores para ${currentCompany}.</div>`;
-  p.style.display = (p.style.display==='none') ? 'block' : 'none';
+  historialActivo = !historialActivo;
+  document.getElementById('btnHistorial').classList.toggle('active', historialActivo);
+  document.getElementById('futuroMenu').style.display = 'none';
+  render();
 }
 function toggleUploadPanel(){
   const p = document.getElementById('uploadPanel');
@@ -607,9 +599,72 @@ function toggleNoProgramado(){
 }
 
 // ---------- RENDER ----------
+// ---------- HISTORIAL (vista completa, agrupada por fecha, solo finalizados) ----------
+function renderHistorial(list){
+  document.getElementById('viewingLabel').innerHTML = `🕘 Historial de ${currentCompany} <a href="#" onclick="toggleHistorialPanel();return false;" style="color:var(--ink-soft);text-decoration:underline;margin-left:6px;">volver a hoy</a>`;
+  document.getElementById('futuroCount').textContent = '';
+  document.getElementById('futuroMenu').style.display = 'none';
+
+  const completados = list.filter(o=>o.Estado==='Completado');
+  const container = document.getElementById('orderList');
+
+  if(completados.length===0){
+    container.innerHTML = `<div class="empty"><div class="big">🕘</div>Aún no hay pedidos completados para ${currentCompany}.</div>`;
+    return;
+  }
+
+  // Agrupa por la fecha real en que se completó (o la de entrega si no hay otra), más reciente primero
+  const grupos = {};
+  completados.forEach(o=>{
+    const fecha = o.Fecha_Ultima_Entrega || o.Fecha_Entrega || 'Sin fecha';
+    if(!grupos[fecha]) grupos[fecha] = [];
+    grupos[fecha].push(o);
+  });
+  const fechasOrdenadas = Object.keys(grupos).sort((a,b)=>{
+    const da = parseFechaStr(a), db = parseFechaStr(b);
+    if(!da && !db) return 0;
+    if(!da) return 1;
+    if(!db) return -1;
+    return db - da; // más reciente primero
+  });
+
+  container.innerHTML = fechasOrdenadas.map(fecha=>`
+    <div style="margin-bottom:22px;">
+      <div style="font-size:12.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">${dayTabLabel(fecha)} · ${grupos[fecha].length} pedido${grupos[fecha].length===1?'':'s'}</div>
+      ${grupos[fecha].map(o=>{
+        const esAbierta = String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
+        const cantidadTxt = esAbierta ? 'Cantidad abierta' : `${Number(o.Cantidad_Entregada).toLocaleString()} / ${Number(o.Cantidad_Total).toLocaleString()}`;
+        return `
+        <div class="order">
+          <div class="detail-inner" style="padding:14px 18px;grid-template-columns:1fr;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div class="client">${o.Razon_Social_Cliente}</div>
+                <div class="ref">${o.Referencia}</div>
+                <div class="oc" style="margin-top:4px;">OC ${o.OC_Cliente} · ${o.Ciudad}</div>
+              </div>
+              <div style="text-align:right;">
+                <div class="qty">${cantidadTxt}</div>
+                <span class="status-pill status-Completado">Completado</span>
+                ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+
 function render(){
   const list = pedidosCache[currentCompany] || [];
   const noProgList = noProgramadosCache[currentCompany] || [];
+
+  if(historialActivo){
+    renderHistorial(list);
+    return;
+  }
 
   const futuros = list.filter(o=>dayCategory(o)==='futuro');
   const fechasFuturas = [...new Set(futuros.map(o=>o.Fecha_Entrega))].sort((a,b)=>parseFechaStr(a)-parseFechaStr(b));
