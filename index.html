@@ -637,6 +637,9 @@ async function pintarDetalle(idPedido){
   const o = list.find(p=>p.ID_Pedido===idPedido);
   if(!o) return;
   const canEdit = currentUser.rol !== 'Consulta';
+  const esAbierta = String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
+  const pendiente = esAbierta ? null : Math.max(0, (Number(o.Cantidad_Total)||0) - (Number(o.Cantidad_Entregada)||0));
+  const pendienteTexto = esAbierta ? '' : pendiente.toLocaleString()+' unds';
 
   if(!entregasCache[idPedido]){
     try{
@@ -667,11 +670,14 @@ async function pintarDetalle(idPedido){
             ` : ''}
             <label>${esClienteRecoge(o) ? 'Quién recoge (nombre y documento/placa)' : 'Transportador'}</label>
             <input type="text" id="transp-${idPedido}" placeholder="${esClienteRecoge(o) ? 'Ej: Juan Pérez, CC 123456 / placa ABC123' : 'Ej: Coordinadora'}">
-            <label>Cantidad despachada</label><input type="number" id="cant-${idPedido}" placeholder="Ej: 2000">
+            <label>Cantidad despachada${(!esAbierta) ? ` <span style="font-weight:400;color:var(--ink-soft);">(pendiente: ${pendienteTexto})</span>` : ''}</label>
+            <input type="number" id="cant-${idPedido}" placeholder="Ej: 2000" oninput="verificarCantidad('${idPedido}', ${esAbierta ? 'null' : pendiente})">
+            <div id="alertaCantidad-${idPedido}" style="display:none;background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:11.5px;font-weight:600;margin-bottom:10px;"></div>
             <label>Novedad</label>
             <select id="nov-${idPedido}" onchange="toggleNovedadDetalle(this,'${idPedido}')">
               <option value="Sin novedad">Sin novedad</option>
               <option value="Faltante de cantidad">Faltante de cantidad</option>
+              <option value="Cantidad excedente">Cantidad excedente (se envió de más)</option>
               <option value="Stickers pendientes">Stickers pendientes</option>
               <option value="Observación de calidad">Observación de calidad</option>
               <option value="Pendiente entrada en sistema">Pendiente entrada en sistema</option>
@@ -685,6 +691,31 @@ async function pintarDetalle(idPedido){
 
 function toggleNovedadDetalle(sel, key){
   document.getElementById('novDetalle-'+key).style.display = (sel.value==='Sin novedad') ? 'none' : 'block';
+}
+
+// Compara lo que se está por despachar contra lo que falta del pedido (pendiente = null para cantidad abierta,
+// donde esta validación no aplica). Si no coincide exacto, obliga a explicar por qué se envía menos o más.
+function verificarCantidad(idPedido, pendiente){
+  const alertaEl = document.getElementById('alertaCantidad-'+idPedido);
+  const selNov = document.getElementById('nov-'+idPedido);
+  const cantidad = Number(document.getElementById('cant-'+idPedido).value);
+
+  if(pendiente === null || !cantidad || cantidad <= 0){
+    alertaEl.style.display = 'none';
+    return;
+  }
+
+  if(cantidad < pendiente){
+    alertaEl.textContent = `⚠ Estás enviando MENOS de lo pendiente (faltarían ${(pendiente-cantidad).toLocaleString()} unds) — explica por qué en la novedad.`;
+    alertaEl.style.display = 'block';
+    if(selNov.value === 'Sin novedad'){ selNov.value = 'Faltante de cantidad'; toggleNovedadDetalle(selNov, idPedido); }
+  } else if(cantidad > pendiente){
+    alertaEl.textContent = `⚠ Estás enviando MÁS de lo pendiente (sobrarían ${(cantidad-pendiente).toLocaleString()} unds) — explica por qué en la novedad.`;
+    alertaEl.style.display = 'block';
+    if(selNov.value === 'Sin novedad'){ selNov.value = 'Cantidad excedente'; toggleNovedadDetalle(selNov, idPedido); }
+  } else {
+    alertaEl.style.display = 'none';
+  }
 }
 
 // ---------- CARGUE (inicio/fin) ----------
@@ -720,11 +751,21 @@ async function registrarEntrega(idPedido){
   if(!cantidad || Number(cantidad)<=0){ showToast('Ingresa una cantidad válida.'); return; }
   const transportador = document.getElementById('transp-'+idPedido).value;
   const tipoNovedad = document.getElementById('nov-'+idPedido).value;
-  const detalleNovedad = document.getElementById('novTexto-'+idPedido) ? document.getElementById('novTexto-'+idPedido).value : '';
+  const detalleNovedad = document.getElementById('novTexto-'+idPedido) ? document.getElementById('novTexto-'+idPedido).value.trim() : '';
 
-  // Si el pedido está atrasado, la razón es obligatoria antes de poder finalizar
+  // Si la cantidad no coincide con lo pendiente del pedido (de más o de menos), la observación es obligatoria
   const list = pedidosCache[currentCompany]||[];
   const o = list.find(p=>p.ID_Pedido===idPedido);
+  const esAbierta = o && String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
+  if(o && !esAbierta){
+    const pendiente = Math.max(0, (Number(o.Cantidad_Total)||0) - (Number(o.Cantidad_Entregada)||0));
+    if(Number(cantidad) !== pendiente && !detalleNovedad){
+      showToast('⚠ La cantidad no coincide con lo pendiente — escribe una observación explicando por qué se envía menos o más.');
+      return;
+    }
+  }
+
+  // Si el pedido está atrasado, la razón es obligatoria antes de poder finalizar
   const requiereRazon = o && esAtrasado(o) && o.Estado!=='Completado';
   const razonEl = document.getElementById('razon-'+idPedido);
   const razon = razonEl ? razonEl.value.trim() : '';
