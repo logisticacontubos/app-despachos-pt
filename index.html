@@ -453,7 +453,7 @@ function dayTabLabel(f){
 function esAtrasado(o){
   if(o.Estado === 'Atrasado') return true;
   const d = parseFechaStr(o.Fecha_Entrega);
-  if(!d) return false; // "Abierta" no cuenta como atrasado automáticamente
+  if(!d) return false; // "Abierta" (sin fecha) no cuenta como atrasado automáticamente
   const diff = Math.round((d - hoyRef())/86400000);
   return diff < 0;
 }
