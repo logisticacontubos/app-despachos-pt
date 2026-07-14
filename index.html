@@ -156,6 +156,7 @@
     <div class="user-pill">
       <span class="dot"></span>
       <span id="userLabel"></span>
+      <button onclick="refrescarTodo()" title="Actualizar datos">🔄</button>
       <button onclick="logout()">Salir</button>
     </div>
   </header>
@@ -337,31 +338,55 @@ async function hacerLogin(){
       renderPinDots();
       return;
     }
-    currentUser = data.usuario;
-    companyLocked = !!currentUser.empresaAsignada;
-    if(companyLocked) currentCompany = currentUser.empresaAsignada;
-
-    document.getElementById('login').style.display='none';
-    document.getElementById('mainApp').style.display='block';
-    document.getElementById('userLabel').textContent = currentUser.nombre + ' · ' + currentUser.rol + (companyLocked ? ' · '+currentCompany : '');
-    document.getElementById('btnUploadToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
-    document.getElementById('btnManualToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
-    document.getElementById('btnNoProgramado').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
-
-    setUpCompanyButtons();
+    entrarConUsuario(data.usuario);
+    localStorage.setItem('despachoPT_sesion', JSON.stringify(data.usuario)); // para que un F5 no cierre sesión
     await cargarPedidos();
   } catch(err){
     errEl.textContent = 'Error de conexión: ' + err.message;
   }
 }
+
+function entrarConUsuario(usuario){
+  currentUser = usuario;
+  companyLocked = !!currentUser.empresaAsignada;
+  if(companyLocked) currentCompany = currentUser.empresaAsignada;
+
+  document.getElementById('login').style.display='none';
+  document.getElementById('mainApp').style.display='block';
+  document.getElementById('userLabel').textContent = currentUser.nombre + ' · ' + currentUser.rol + (companyLocked ? ' · '+currentCompany : '');
+  document.getElementById('btnUploadToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
+  document.getElementById('btnManualToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
+  document.getElementById('btnNoProgramado').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
+
+  setUpCompanyButtons();
+}
+
 function logout(){
   currentUser = null;
   pedidosCache = {}; entregasCache = {};
   pinActual = '';
   renderPinDots();
+  localStorage.removeItem('despachoPT_sesion');
   document.getElementById('mainApp').style.display='none';
   document.getElementById('login').style.display='flex';
 }
+async function refrescarTodo(){
+  showToast('Actualizando datos...');
+  await cargarPedidos();
+  showToast('✅ Datos actualizados');
+}
+
+// Al cargar la página, si ya había una sesión iniciada, entra directo sin pedir PIN de nuevo
+(function restaurarSesion(){
+  const guardada = localStorage.getItem('despachoPT_sesion');
+  if(guardada){
+    try{
+      entrarConUsuario(JSON.parse(guardada));
+      cargarPedidos();
+    } catch(e){ localStorage.removeItem('despachoPT_sesion'); }
+  }
+})();
+
 function setUpCompanyButtons(){
   const btnC = document.getElementById('btn-contubos');
   const btnT = document.getElementById('btn-tecnipapel');
@@ -439,10 +464,18 @@ function esClienteRecoge(o){
   return /cliente\s*recoge/i.test(o.Notas_Planilla || '');
 }
 function dayCategory(o){
+  if(o.Estado === 'Completado'){
+    // Para completados, lo que importa es cuándo se completó de verdad, no la fecha original de entrega
+    // (así un pedido atrasado que se termina hoy cuenta en "Completados hoy", no en Historial).
+    const dCompletado = parseFechaStr(o.Fecha_Ultima_Entrega) || parseFechaStr(o.Fecha_Entrega);
+    if(!dCompletado) return 'hoy';
+    const diffCompletado = Math.round((dCompletado - hoyRef())/86400000);
+    return diffCompletado === 0 ? 'hoy' : 'historial';
+  }
   const d = parseFechaStr(o.Fecha_Entrega);
   if(!d) return 'hoy'; // "Abierta"
   const diff = Math.round((d - hoyRef())/86400000);
-  if(diff < 0) return o.Estado==='Completado' ? 'historial' : 'hoy';
+  if(diff < 0) return 'hoy';
   if(diff === 0) return 'hoy';
   return 'futuro';
 }
@@ -573,7 +606,7 @@ function render(){
         <div><div class="cell-label">Cliente</div><div class="client">${o.Razon_Social_Cliente}</div><div class="ref">${o.Referencia}</div></div>
         <div><div class="cell-label">OC / PVT</div><div class="oc">OC ${o.OC_Cliente} · PVT ${o.PVT||'-'}</div><div class="oc">Entrega: ${o.Fecha_Entrega}</div></div>
         <div><div class="cell-label">Ciudad</div><span class="city-badge">${o.Ciudad}</span>${esClienteRecoge(o) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:#DCEEFB;color:#1B6FBF;">🚗 Recoge cliente</span></div>` : ''}</div>
-        <div><div class="cell-label">Cantidad</div><div class="qty">${esAbierta ? entregado.toLocaleString()+' unds' : entregado.toLocaleString()+' <span class="of">/ '+total.toLocaleString()+'</span>'}</div></div>
+        <div><div class="cell-label">Cantidad</div><div class="qty">${esAbierta ? 'Abierta' : entregado.toLocaleString()+' <span class="of">/ '+total.toLocaleString()+'</span>'}</div></div>
         <div><div class="cell-label">Avance</div>${esAbierta
           ? `<span class="status-pill" style="background:#F0E6FB;color:#7A3FBF;">Cantidad abierta</span>`
           : `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div><div class="progress-pct">${pct}% completado</div>`}</div>
