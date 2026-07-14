@@ -399,6 +399,7 @@ async function hacerLogin(){
       return;
     }
     entrarConUsuario(data.usuario);
+    resetVistaPrincipal();
     localStorage.setItem('despachoPT_sesion', JSON.stringify(data.usuario)); // para que un F5 no cierre sesión
     await cargarPedidos();
   } catch(err){
@@ -453,10 +454,41 @@ async function refrescarTodo(){
   if(guardada){
     try{
       entrarConUsuario(JSON.parse(guardada));
+      resetVistaPrincipal();
       cargarPedidos();
     } catch(e){ localStorage.removeItem('despachoPT_sesion'); }
   }
 })();
+
+// Deja la app en su vista "normal" de arranque (pendientes/atrasados de hoy, sin filtros ni modos activos),
+// sin importar en qué pestaña o modo se haya quedado la vez anterior.
+function resetVistaPrincipal(){
+  currentFilter = 'principal';
+  currentDayFilter = 'hoy';
+  historialActivo = false;
+  modoSeleccion = false;
+  seleccionados.clear();
+  document.querySelectorAll('.stat-card').forEach(card=>card.classList.remove('tab-active'));
+  const btnHist = document.getElementById('btnHistorial');
+  if(btnHist) btnHist.classList.remove('active');
+  const btnSel = document.getElementById('btnModoSeleccion');
+  if(btnSel){ btnSel.classList.remove('active'); btnSel.textContent = '☑ Selección múltiple'; }
+  document.getElementById('futuroMenu').style.display = 'none';
+  document.getElementById('floatbar').classList.remove('show');
+  document.getElementById('overlaySeleccion').classList.remove('show');
+  document.getElementById('noProgramadoForm').style.display = 'none';
+  document.getElementById('uploadPanel').style.display = 'none';
+  document.getElementById('manualPanel').style.display = 'none';
+}
+
+// En celular, volver a abrir la app casi nunca recarga la página de verdad — solo la retoma
+// donde estaba. Esto detecta cuando vuelve a quedar visible y la deja en la vista normal otra vez.
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && currentUser){
+    resetVistaPrincipal();
+    render();
+  }
+});
 
 function setUpCompanyButtons(){
   const btnC = document.getElementById('btn-contubos');
