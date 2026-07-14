@@ -108,6 +108,30 @@
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:white;padding:12px 20px;border-radius:10px;font-size:12.5px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:80vw;text-align:center;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
   .loading{text-align:center;padding:40px;color:var(--ink-soft);font-size:13px;}
+
+  /* Selección múltiple */
+  .order-check{width:22px;height:22px;border-radius:6px;border:2px solid var(--line);flex-shrink:0;display:none;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:white;font-weight:700;margin-right:4px;}
+  .order.selectMode .order-check{display:flex;}
+  .order.checkedForDispatch{outline:2px solid var(--magenta);}
+  .order-check.checked{background:var(--magenta);border-color:var(--magenta);}
+  .floatbar{
+    position:fixed;left:0;right:0;bottom:0;background:var(--ink);color:white;
+    padding:14px 20px;display:none;align-items:center;justify-content:space-between;
+    box-shadow:0 -4px 20px rgba(0,0,0,0.15);z-index:30;font-size:13px;
+  }
+  .floatbar.show{display:flex;}
+  .floatbar button{background:var(--magenta);color:white;border:none;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .overlay{position:fixed;inset:0;background:rgba(43,43,43,0.45);display:none;align-items:flex-end;justify-content:center;z-index:40;}
+  .overlay.show{display:flex;}
+  .sheet{background:var(--card);border-radius:20px 20px 0 0;max-width:600px;width:100%;max-height:88vh;overflow-y:auto;padding:22px 22px 30px;position:relative;}
+  .sheet h2{font-size:16px;margin:0 0 4px;}
+  .sheet .sub{font-size:12px;color:var(--ink-soft);margin:0 0 18px;}
+  .close-x{position:absolute;top:16px;right:20px;background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink-soft);}
+  .shared-box{background:#FCFBFA;border:1px dashed var(--line);border-radius:10px;padding:14px;margin-bottom:16px;}
+  .shared-box input{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13px;margin-bottom:12px;font-family:inherit;}
+  .item-row{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;}
+  .item-row .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:10px;}
+  .item-row input, .item-row textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit;margin-bottom:6px;}
   @media (max-width:900px){
     .stats{grid-template-columns:repeat(2,1fr);}
     .order-row{grid-template-columns:1fr; row-gap:8px;}
@@ -176,6 +200,7 @@
       <button class="upload-btn" id="btnUploadToggle" onclick="toggleUploadPanel()" style="display:none;">+ Cargar Excel</button>
       <button class="upload-btn" id="btnManualToggle" onclick="toggleManualPanel()" style="display:none;">+ Pedido manual</button>
       <button class="upload-btn" id="btnNoProgramado" onclick="toggleNoProgramado()" style="border-color:var(--magenta);color:var(--magenta);">+ Despacho no programado</button>
+      <button class="upload-btn" id="btnModoSeleccion" onclick="toggleModoSeleccion()" style="display:none;">☑ Selección múltiple</button>
     </div>
   </div>
 
@@ -266,6 +291,33 @@
   <div id="orderList"><div class="loading">Cargando pedidos...</div></div>
 </div>
 
+<div class="floatbar" id="floatbar">
+  <span id="floatCount">0 pedidos seleccionados</span>
+  <button onclick="abrirConsolidado()">Despachar seleccionados →</button>
+</div>
+
+<div class="overlay" id="overlaySeleccion" onclick="if(event.target===this) cerrarConsolidado()">
+  <div class="sheet">
+    <button class="close-x" onclick="cerrarConsolidado()">✕</button>
+    <h2>Registrar despacho — mismo vehículo</h2>
+    <p class="sub">El transportador y el tiempo de cargue se aplican a todos los pedidos seleccionados.</p>
+
+    <div class="shared-box">
+      <label style="display:block;">Transportador</label>
+      <input type="text" id="sharedTransportador" placeholder="Ej: Coordinadora">
+      <label style="display:block;">Control de tiempo de cargue</label>
+      <div id="sharedCargueBtnWrap">
+        <button type="button" onclick="iniciarCargueBatch()" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>
+      </div>
+      <div id="sharedCargueTime" style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;">Aún no se ha iniciado el cargue.</div>
+    </div>
+
+    <div id="itemsSeleccionados"></div>
+
+    <button class="confirm-btn" onclick="confirmarDespachoMultiple()">⏹ Finalizar cargue y registrar todas las entregas</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -274,6 +326,9 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbxc8YZL3fxE56Q4ydjT5Kgp
 let currentUser = null;
 let currentCompany = 'Contubos';
 let currentFilter = 'principal';
+let modoSeleccion = false;
+let seleccionados = new Set();
+let cargueBatch = { inicio: null, fin: null };
 let currentDayFilter = 'hoy';
 let pedidosCache = {};
 let noProgramadosCache = {};
@@ -357,6 +412,7 @@ function entrarConUsuario(usuario){
   document.getElementById('btnUploadToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
   document.getElementById('btnManualToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
   document.getElementById('btnNoProgramado').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
+  document.getElementById('btnModoSeleccion').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
 
   setUpCompanyButtons();
 }
@@ -602,9 +658,11 @@ function render(){
     const entregado = Number(o.Cantidad_Entregada)||0;
     const pct = (!esAbierta && total>0) ? Math.round((entregado/total)*100) : 0;
     const key = o.ID_Pedido;
+    const puedeSeleccionar = canEdit && o.Estado!=='Completado';
     return `
-    <div class="order" id="order-${key}">
-      <div class="order-row" onclick="toggleOrder('${key}')">
+    <div class="order ${modoSeleccion && seleccionados.has(key) ? 'checkedForDispatch' : ''}" id="order-${key}">
+      <div class="order-row" onclick="${modoSeleccion ? (puedeSeleccionar ? `toggleSeleccion('${key}')` : '') : `toggleOrder('${key}')`}" style="${modoSeleccion ? 'gap:8px;' : ''}">
+        ${modoSeleccion ? `<div class="order-check ${seleccionados.has(key)?'checked':''}" style="display:flex;">${seleccionados.has(key)?'✓':''}</div>` : ''}
         <div><div class="cell-label">Cliente</div><div class="client">${o.Razon_Social_Cliente}</div><div class="ref">${o.Referencia}</div></div>
         <div><div class="cell-label">OC / PVT</div><div class="oc">OC ${o.OC_Cliente} · PVT ${o.PVT||'-'}</div><div class="oc">Entrega: ${o.Fecha_Entrega}</div></div>
         <div><div class="cell-label">Ciudad</div><span class="city-badge">${o.Ciudad}</span>${esClienteRecoge(o) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:#DCEEFB;color:#1B6FBF;">🚗 Recoge cliente</span></div>` : ''}</div>
@@ -616,13 +674,163 @@ function render(){
           <span class="status-pill status-${o.Estado}">${o.Estado}</span>
           ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
         </div>
-        <div class="chevron">›</div>
+        <div class="chevron">${modoSeleccion ? '' : '›'}</div>
       </div>
       <div class="order-detail" id="detail-${key}">
         <div class="detail-inner"><div class="loading" style="grid-column:1/-1;">Cargando detalle...</div></div>
       </div>
     </div>`;
   }).join('');
+}
+
+// ---------- SELECCIÓN MÚLTIPLE (varios pedidos, mismo vehículo) ----------
+function toggleModoSeleccion(){
+  modoSeleccion = !modoSeleccion;
+  seleccionados.clear();
+  const btn = document.getElementById('btnModoSeleccion');
+  btn.classList.toggle('active', modoSeleccion);
+  btn.textContent = modoSeleccion ? '✕ Salir de selección' : '☑ Selección múltiple';
+  actualizarFloatbar();
+  render();
+}
+function toggleSeleccion(idPedido){
+  if(seleccionados.has(idPedido)) seleccionados.delete(idPedido); else seleccionados.add(idPedido);
+  actualizarFloatbar();
+  render();
+}
+function actualizarFloatbar(){
+  const bar = document.getElementById('floatbar');
+  const n = seleccionados.size;
+  document.getElementById('floatCount').textContent = `${n} pedido${n===1?'':'s'} seleccionado${n===1?'':'s'}`;
+  bar.classList.toggle('show', n>0);
+}
+
+function abrirConsolidado(){
+  cargueBatch = { inicio: null, fin: null };
+  document.getElementById('sharedTransportador').value = '';
+  document.getElementById('sharedCargueTime').textContent = 'Aún no se ha iniciado el cargue.';
+  document.getElementById('sharedCargueTime').style.cssText = 'font-size:11.5px;color:var(--ink-soft);margin-top:8px;';
+  document.getElementById('sharedCargueBtnWrap').innerHTML = `<button type="button" onclick="iniciarCargueBatch()" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>`;
+
+  const list = pedidosCache[currentCompany]||[];
+  const wrap = document.getElementById('itemsSeleccionados');
+  wrap.innerHTML = [...seleccionados].map(idPedido=>{
+    const o = list.find(p=>p.ID_Pedido===idPedido);
+    if(!o) return '';
+    const esAbierta = String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
+    const pendiente = esAbierta ? null : Math.max(0, (Number(o.Cantidad_Total)||0) - (Number(o.Cantidad_Entregada)||0));
+    return `
+    <div class="item-row" data-id="${idPedido}" data-pendiente="${esAbierta ? '' : pendiente}" data-abierta="${esAbierta}">
+      <div class="top">
+        <div>
+          <div class="client" style="font-weight:700;font-size:12.5px;">${o.Razon_Social_Cliente}</div>
+          <div class="pend" style="font-size:11px;color:var(--ink-soft);">${o.Referencia}</div>
+        </div>
+        <div class="pend" style="font-size:11px;color:var(--ink-soft);white-space:nowrap;">${esAbierta ? 'Cantidad abierta' : 'Pendiente: '+pendiente.toLocaleString()}</div>
+      </div>
+      ${esAtrasado(o) && o.Estado!=='Completado' ? `<textarea placeholder="Razón del atraso (obligatoria)" data-tipo="razon" style="border-color:var(--danger);"></textarea>` : ''}
+      <input type="number" placeholder="Cantidad despachada" oninput="verificarCantidadBatch(this)">
+      <div class="alerta" style="display:none;background:var(--warn-soft);color:var(--warn);border-radius:6px;padding:6px 8px;font-size:11px;font-weight:600;margin-bottom:6px;"></div>
+      <textarea placeholder="Explica por qué se envía menos o más (si aplica)" data-tipo="obs" style="display:none;"></textarea>
+    </div>`;
+  }).join('');
+
+  document.getElementById('overlaySeleccion').classList.add('show');
+}
+function cerrarConsolidado(){
+  document.getElementById('overlaySeleccion').classList.remove('show');
+}
+
+function iniciarCargueBatch(){
+  cargueBatch.inicio = new Date();
+  document.getElementById('sharedCargueBtnWrap').style.display = 'none';
+  const timeEl = document.getElementById('sharedCargueTime');
+  timeEl.style.cssText = 'background:var(--ok-soft);border:1px solid var(--ok);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;color:var(--ok);margin-top:8px;';
+  timeEl.textContent = `✅ Cargue iniciado a las ${fmtHora(cargueBatch.inicio)} — en curso...`;
+}
+
+function verificarCantidadBatch(input){
+  const row = input.closest('.item-row');
+  const pendienteRaw = row.dataset.pendiente;
+  const esAbierta = row.dataset.abierta === 'true';
+  const alerta = row.querySelector('.alerta');
+  const obs = row.querySelector('[data-tipo="obs"]');
+  const cantidad = Number(input.value);
+
+  if(esAbierta || pendienteRaw===''){ alerta.style.display='none'; obs.style.display='none'; return; }
+  const pendiente = Number(pendienteRaw);
+  if(!cantidad || cantidad<=0){ alerta.style.display='none'; obs.style.display='none'; return; }
+
+  if(cantidad !== pendiente){
+    alerta.textContent = cantidad < pendiente
+      ? `⚠ Menos de lo pendiente (faltarían ${(pendiente-cantidad).toLocaleString()} unds)`
+      : `⚠ Más de lo pendiente (sobrarían ${(cantidad-pendiente).toLocaleString()} unds)`;
+    alerta.style.display = 'block';
+    obs.style.display = 'block';
+  } else {
+    alerta.style.display = 'none';
+    obs.style.display = 'none';
+  }
+}
+
+async function confirmarDespachoMultiple(){
+  if(!cargueBatch.inicio){ showToast('⚠ Primero da clic en "Inicio de cargue" antes de finalizar.'); return; }
+  const transportador = document.getElementById('sharedTransportador').value;
+  const filas = [...document.querySelectorAll('#itemsSeleccionados .item-row')];
+  if(filas.length===0){ showToast('No hay pedidos seleccionados.'); return; }
+
+  // Valida TODO antes de enviar nada — si algo falta, se avisa y no se registra ninguno
+  const registros = [];
+  for(const fila of filas){
+    const idPedido = fila.dataset.id;
+    const cantidadInput = fila.querySelector('input[type="number"]');
+    const cantidad = Number(cantidadInput.value);
+    const nombreCliente = fila.querySelector('.client').textContent;
+    if(!cantidad || cantidad<=0){ showToast(`⚠ Falta la cantidad para "${nombreCliente}".`); return; }
+
+    const razonEl = fila.querySelector('[data-tipo="razon"]');
+    if(razonEl && !razonEl.value.trim()){ showToast(`⚠ Falta la razón de atraso para "${nombreCliente}".`); return; }
+
+    const esAbierta = fila.dataset.abierta === 'true';
+    const pendienteRaw = fila.dataset.pendiente;
+    let tipoNovedad = 'Sin novedad', detalleNovedad = '';
+    if(!esAbierta && pendienteRaw!==''){
+      const pendiente = Number(pendienteRaw);
+      if(cantidad !== pendiente){
+        const obsEl = fila.querySelector('[data-tipo="obs"]');
+        if(!obsEl.value.trim()){ showToast(`⚠ Explica por qué la cantidad no coincide en "${nombreCliente}".`); return; }
+        tipoNovedad = cantidad < pendiente ? 'Faltante de cantidad' : 'Cantidad excedente';
+        detalleNovedad = obsEl.value.trim();
+      }
+    }
+    registros.push({ idPedido, cantidad, razon: razonEl ? razonEl.value.trim() : '', tipoNovedad, detalleNovedad });
+  }
+
+  if(!cargueBatch.fin) cargueBatch.fin = new Date();
+  const horaInicio = fmtHora(cargueBatch.inicio);
+  const horaFin = fmtHora(cargueBatch.fin);
+
+  showToast('Registrando entregas...');
+  try{
+    for(const r of registros){
+      const data = await llamarAPI({ accion:'registrarEntrega', idPedido:r.idPedido, cantidad:r.cantidad, transportador, tipoNovedad:r.tipoNovedad, detalleNovedad:r.detalleNovedad, horaInicio, horaFin, registradoPor: currentUser.nombre });
+      if(data.ok && r.razon){
+        const list = pedidosCache[currentCompany]||[];
+        const o = list.find(p=>p.ID_Pedido===r.idPedido);
+        await llamarAPI({ accion:'registrarRazonAtraso', idPedido:r.idPedido, fechaProgramadaOriginal:o?o.Fecha_Entrega:'', razon:r.razon, registradoPor:currentUser.nombre });
+      }
+    }
+    showToast(`✅ ${registros.length} entregas registradas correctamente.`);
+    cerrarConsolidado();
+    seleccionados.clear();
+    modoSeleccion = false;
+    document.getElementById('btnModoSeleccion').classList.remove('active');
+    document.getElementById('btnModoSeleccion').textContent = '☑ Selección múltiple';
+    actualizarFloatbar();
+    await cargarPedidos();
+  } catch(err){
+    showToast('Error de conexión: '+err.message);
+  }
 }
 
 async function toggleOrder(key){
