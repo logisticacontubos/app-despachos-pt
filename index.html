@@ -1,1 +1,894 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Despachos — Producto Terminado</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#F6F5F3; --card:#FFFFFF; --ink:#2B2B2B; --ink-soft:#6B6863;
+    --magenta:#D01148; --magenta-soft:#FBE8EE;
+    --line:#EAE7E1; --ok:#2E8B57; --ok-soft:#E7F4EC;
+    --warn:#B8860B; --warn-soft:#FBF3DD; --danger:#C0392B; --danger-soft:#FBEAE7;
+    --shadow: 0 1px 2px rgba(43,43,43,0.04), 0 6px 20px rgba(43,43,43,0.06);
+    --radius: 14px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+  .app{max-width:1180px;margin:0 auto;padding:0 20px 60px;}
 
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 20% 15%, #fdf6f8 0%, var(--bg) 55%);}
+  .login-card{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:44px 40px;width:360px;text-align:center;}
+  .login-card .brandmark{width:52px;height:52px;border-radius:14px;background:var(--magenta);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;color:white;font-weight:700;font-size:20px;}
+  .login-card h1{font-size:19px;margin:0 0 4px;letter-spacing:-0.01em;}
+  .login-card p.sub{color:var(--ink-soft);font-size:13px;margin:0 0 24px;}
+  .login-card input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:16px;text-align:center;letter-spacing:0.2em;margin-bottom:14px;font-family:inherit;}
+  .login-card button{width:100%;background:var(--magenta);color:white;border:none;padding:12px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .login-error{color:var(--danger);font-size:12px;margin-top:10px;min-height:16px;}
+
+  header.topbar{padding:22px 0 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+  .brand-row{display:flex;align-items:center;gap:12px;}
+  .brand-row .mark{width:38px;height:38px;border-radius:10px;background:var(--magenta);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;}
+  .brand-row h1{font-size:16.5px;margin:0;letter-spacing:-0.01em;}
+  .brand-row .who{font-size:11.5px;color:var(--ink-soft);margin-top:1px;}
+  .company-toggle{display:flex;background:#ECEAE5;border-radius:10px;padding:3px;gap:2px;}
+  .company-toggle button{border:none;background:transparent;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:inherit;}
+  .company-toggle button.active{background:white;color:var(--ink);box-shadow:var(--shadow);}
+  .company-toggle button:disabled{opacity:0.35;cursor:not-allowed;}
+  .user-pill{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:999px;padding:6px 6px 6px 14px;box-shadow:var(--shadow);font-size:12.5px;}
+  .user-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);}
+  .user-pill button{border:none;background:#F1EFEA;border-radius:999px;padding:6px 12px;font-size:11.5px;cursor:pointer;color:var(--ink-soft);font-family:inherit;}
+
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:10px;}
+  .stat-card{background:var(--card);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);cursor:pointer;border:2px solid transparent;transition:.15s;}
+  .stat-card:hover{transform:translateY(-1px);}
+  .stat-card.tab-active{border-color:var(--ink);}
+  .stat-card .label{font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-weight:600;}
+  .stat-card .value{font-size:28px;font-weight:700;margin-top:6px;letter-spacing:-0.02em;}
+  .stat-card.pend .value{color:#8A6D00;} .stat-card.atra .value{color:var(--danger);}
+  .stat-card.parc .value{color:#1B6FBF;} .stat-card.comp .value{color:var(--ok);}
+  .stat-card.noprog .value{color:#7A3FBF;}
+
+  .toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;}
+  .filters{display:flex;gap:6px;flex-wrap:wrap;}
+  .filters button{border:1px solid var(--line);background:var(--card);padding:8px 14px;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:inherit;}
+  .filters button.active{background:var(--ink);color:white;border-color:var(--ink);}
+  .upload-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);padding:9px 14px;border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);color:var(--ink);font-family:inherit;}
+  .upload-btn.primary{background:var(--magenta);color:white;border-color:var(--magenta);}
+
+  .order{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:10px;overflow:hidden;}
+  .order-row{display:grid;grid-template-columns:1.6fr 1.1fr .9fr 1fr 1.2fr .9fr 28px;gap:14px;align-items:center;padding:16px 20px;cursor:pointer;}
+  .order-row:hover{background:#FCFBFA;}
+  .cell-label{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;display:none;}
+  .client{font-weight:700;font-size:13.5px;}
+  .ref{font-size:11.5px;color:var(--ink-soft);margin-top:2px;line-height:1.3;}
+  .oc{font-size:11.5px;color:var(--ink-soft);}
+  .city-badge{display:inline-block;font-size:11.5px;font-weight:600;color:#5A4B00;background:#F5EED2;padding:3px 10px;border-radius:999px;}
+  .qty{font-size:13px;font-weight:600;} .qty .of{color:var(--ink-soft);font-weight:400;}
+  .progress-track{background:#EEECE7;border-radius:999px;height:7px;overflow:hidden;}
+  .progress-fill{height:100%;border-radius:999px;background:var(--magenta);transition:width .4s;}
+  .progress-pct{font-size:10.5px;color:var(--ink-soft);margin-top:4px;}
+  .status-pill{font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px;white-space:nowrap;}
+  .status-Pendiente{background:var(--warn-soft);color:var(--warn);}
+  .status-Parcial{background:#E7F0FB;color:#1B6FBF;}
+  .status-Completado{background:var(--ok-soft);color:var(--ok);}
+  .status-Atrasado{background:var(--danger-soft);color:var(--danger);}
+  .status-flag-atrasado{background:#FFB020;color:#5A3A00;border:1px solid #E09000;font-weight:800;}
+  .chevron{color:var(--ink-soft);font-size:14px;transition:.2s;}
+  .order.open .chevron{transform:rotate(90deg);}
+  .order-detail{max-height:0;overflow:hidden;transition:max-height .25s ease;border-top:1px solid var(--line);}
+  .order.open .order-detail{max-height:700px;}
+  .detail-inner{padding:18px 20px 22px;display:grid;grid-template-columns:1.2fr 1fr;gap:24px;}
+  .detail-inner h4{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);margin:0 0 10px;}
+  .entrega-item{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px dashed var(--line);font-size:12.5px;}
+  .entrega-item:last-child{border-bottom:none;}
+  .entrega-date{color:var(--ink-soft);font-size:11px;}
+  .novedad-tag{display:inline-block;font-size:10.5px;background:var(--magenta-soft);color:var(--magenta);padding:2px 8px;border-radius:6px;margin-top:4px;}
+  .add-entrega{background:#FCFBFA;border:1px dashed var(--line);border-radius:10px;padding:14px;}
+  .add-entrega label{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;}
+  .add-entrega input, .add-entrega select, .add-entrega textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:10px;font-family:inherit;background:white;}
+  .add-entrega button{background:var(--ink);color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;width:100%;font-family:inherit;}
+  .readonly-note{font-size:11.5px;color:var(--ink-soft);font-style:italic;padding:10px;background:#FCFBFA;border-radius:8px;}
+  .reason-box{margin-top:10px;background:var(--danger-soft);border-radius:10px;padding:12px 14px;}
+  .reason-box .title{font-size:11.5px;font-weight:700;color:var(--danger);margin-bottom:6px;}
+  .reason-box textarea{width:100%;border:1px solid #EFC9C2;border-radius:8px;padding:8px 10px;font-size:12px;font-family:inherit;resize:vertical;min-height:44px;background:white;}
+  .empty{text-align:center;padding:60px 20px;color:var(--ink-soft);}
+  .empty .big{font-size:34px;margin-bottom:8px;}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:white;padding:12px 20px;border-radius:10px;font-size:12.5px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:80vw;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  .loading{text-align:center;padding:40px;color:var(--ink-soft);font-size:13px;}
+  @media (max-width:900px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .order-row{grid-template-columns:1fr; row-gap:8px;}
+    .cell-label{display:block;}
+    .detail-inner{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="login-card">
+    <div class="brandmark">PT</div>
+    <h1>Control de Despachos</h1>
+    <p class="sub">Producto Terminado — ingresa tu PIN</p>
+    <input type="tel" id="pinInput" placeholder="••••" maxlength="8" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+    <button onclick="hacerLogin()">Ingresar</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<div class="app" id="mainApp" style="display:none;">
+  <header class="topbar">
+    <div class="brand-row">
+      <div class="mark">PT</div>
+      <div><h1>Control de Despachos</h1><div class="who">Producto Terminado</div></div>
+    </div>
+    <div class="company-toggle">
+      <button id="btn-contubos" onclick="setCompany('Contubos')">Contubos</button>
+      <button id="btn-tecnipapel" onclick="setCompany('Tecnipapel')">Tecnipapel</button>
+    </div>
+    <div class="user-pill">
+      <span class="dot"></span>
+      <span id="userLabel"></span>
+      <button onclick="logout()">Salir</button>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat-card pend" id="tab-pendiente" onclick="setStatFilter('pendiente')"><div class="label">Pendientes hoy</div><div class="value" id="stat-pend">0</div></div>
+    <div class="stat-card atra" id="tab-atrasado" onclick="setStatFilter('atrasado')"><div class="label">Atrasados</div><div class="value" id="stat-atra">0</div></div>
+    <div class="stat-card parc" id="tab-parcial" onclick="setStatFilter('parcial')"><div class="label">Parciales en curso</div><div class="value" id="stat-parc">0</div></div>
+    <div class="stat-card comp" id="tab-completado" onclick="setStatFilter('completado')"><div class="label">Completados hoy</div><div class="value" id="stat-comp">0</div></div>
+    <div class="stat-card noprog" id="tab-noprogramado" onclick="setStatFilter('noprogramado')"><div class="label">No programados</div><div class="value" id="stat-noprog">0</div></div>
+  </div>
+  <div id="tabHint" style="font-size:11.5px;color:var(--ink-soft);margin:-14px 0 18px;">Mostrando: pendientes sin despacho + atrasados. Haz clic en un recuadro de arriba para ver esa categoría por separado (clic de nuevo para volver aquí).</div>
+
+  <div class="toolbar">
+    <div></div>
+    <div style="display:flex;gap:8px;">
+      <button class="upload-btn" id="btnUploadToggle" onclick="toggleUploadPanel()" style="display:none;">+ Cargar Excel</button>
+      <button class="upload-btn" id="btnManualToggle" onclick="toggleManualPanel()" style="display:none;">+ Pedido manual</button>
+      <button class="upload-btn" id="btnNoProgramado" onclick="toggleNoProgramado()" style="border-color:var(--magenta);color:var(--magenta);">+ Despacho no programado</button>
+    </div>
+  </div>
+
+  <div class="order" id="uploadPanel" style="display:none;margin-bottom:16px;">
+    <div class="detail-inner" style="padding:16px 20px;grid-template-columns:1fr;">
+      <div>
+        <h4>Cargar planilla desde Excel</h4>
+        <div class="readonly-note" style="margin-bottom:10px;">
+          Sube el archivo tal como te llega por correo. La app lee las columnas <strong>OC CLIENTE, PVT, RAZÓN SOCIAL CLIENTE, REFERENCIA, CANTIDAD DESPACHO, CIUDAD y NOVEDADES</strong>. Primero indica para qué día es esta programación — esa fecha se le asigna a todos los pedidos de este archivo, en vez de depender de lo que traiga la columna de fecha del Excel (para que la de mañana no se cargue como si fuera de hoy).
+        </div>
+        <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;">¿Para qué día es esta planilla? *</label>
+        <input type="date" id="excelFecha" style="border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13px;margin-bottom:12px;width:100%;max-width:220px;">
+        <input type="file" id="excelFile" accept=".xlsx,.xls" onchange="procesarExcel(event)" style="margin-bottom:12px;display:block;">
+        <div id="excelPreviewWrap" style="display:none;">
+          <div style="max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;">
+            <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+              <thead style="position:sticky;top:0;background:#F1EFEA;">
+                <tr id="excelPreviewHeader"></tr>
+              </thead>
+              <tbody id="excelPreviewBody"></tbody>
+            </table>
+          </div>
+          <div id="excelPreviewSummary" style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;"></div>
+          <button onclick="confirmarCargaExcel()">Confirmar y cargar estos pedidos</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="order" id="manualPanel" style="display:none;margin-bottom:16px;">
+    <div class="detail-inner" style="padding:16px 20px;grid-template-columns:1fr;">
+      <div>
+        <h4>Cargar un pedido suelto manualmente</h4>
+        <div class="readonly-note" style="margin-bottom:10px;">Para cuando solo necesitas agregar uno o dos pedidos rápido, sin subir un Excel completo.</div>
+        <div class="add-entrega" style="background:transparent;border:none;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:0 14px;">
+          <div><label>Fecha de entrega</label><input type="date" id="upFecha"></div>
+          <div><label>OC Cliente</label><input type="text" id="upOc"></div>
+          <div><label>PVT</label><input type="text" id="upPvt"></div>
+          <div><label>Razón social cliente</label><input type="text" id="upCliente"></div>
+          <div><label>Referencia</label><input type="text" id="upReferencia"></div>
+          <div><label>Ciudad</label><input type="text" id="upCiudad"></div>
+          <div><label>Cantidad total</label><input type="number" id="upCantidad"></div>
+        </div>
+        <button style="margin-top:6px;" onclick="cargarPedidoManual()">Cargar pedido</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="order" id="noProgramadoForm" style="display:none;margin-bottom:16px;">
+    <div class="detail-inner" style="padding:18px 20px;grid-template-columns:1fr;">
+      <div>
+        <h4>Registrar despacho no programado (adelanto)</h4>
+        <div class="add-entrega" style="background:transparent;border:none;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:0 14px;">
+          <div><label>OC del cliente</label><input type="text" id="npOc"></div>
+          <div><label>PVT</label><input type="text" id="npPvt"></div>
+          <div><label>Razón social cliente</label><input type="text" id="npCliente"></div>
+          <div><label>Referencia</label><input type="text" id="npReferencia"></div>
+          <div><label>Ciudad</label><input type="text" id="npCiudad"></div>
+          <div><label>Cantidad despachada</label><input type="number" id="npCantidad"></div>
+          <div><label>Transportador</label><input type="text" id="npTransportador"></div>
+          <div><label>Autorizado por *</label><input type="text" id="npAutorizadoPor" placeholder="Nombre de quien autoriza"></div>
+        </div>
+        <div class="readonly-note" style="margin-top:4px;">
+          Como se conoce la OC, este despacho se <strong>vinculará automáticamente</strong> al pedido programado cuando cargues la planilla que la contenga.
+        </div>
+        <button style="margin-top:10px;" onclick="registrarNoProgramado()">Registrar despacho</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    <div id="viewingLabel" style="font-size:12.5px;color:var(--ink-soft);font-weight:600;"></div>
+    <div style="display:flex;gap:6px;">
+      <div style="position:relative;">
+        <button class="upload-btn" onclick="toggleFuturoMenu()">📅 Próximos días <span id="futuroCount" style="color:var(--magenta);font-weight:700;"></span></button>
+        <div id="futuroMenu" style="display:none;position:absolute;right:0;top:40px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px;min-width:190px;z-index:20;"></div>
+      </div>
+      <button class="upload-btn" onclick="toggleHistorialPanel()">🕘 Historial</button>
+    </div>
+  </div>
+
+  <div class="order" id="historialPanel" style="display:none;margin-bottom:14px;">
+    <div class="detail-inner" style="padding:16px 20px;grid-template-columns:1fr;">
+      <div><h4>Historial (días anteriores ya completados)</h4><div id="historialList"></div></div>
+    </div>
+  </div>
+
+  <div id="orderList"><div class="loading">Cargando pedidos...</div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbxc8YZL3fxE56Q4ydjT5Kgpch74sfkpgJUR1SVciw9V2Jseg3DWU_9a_KyUB2Rq2Xsp/exec';
+
+let currentUser = null;
+let currentCompany = 'Contubos';
+let currentFilter = 'principal';
+let currentDayFilter = 'hoy';
+let pedidosCache = {};
+let noProgramadosCache = {};
+let entregasCache = {};
+let companyLocked = false;
+
+async function llamarAPI(payload){
+  const resp = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+  return resp.json();
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+// ---------- LOGIN ----------
+async function hacerLogin(){
+  const pin = document.getElementById('pinInput').value.trim();
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!pin){ errEl.textContent='Ingresa tu PIN.'; return; }
+  try{
+    const data = await llamarAPI({ accion:'login', pin });
+    if(!data.ok){ errEl.textContent = data.error || 'PIN incorrecto.'; return; }
+    currentUser = data.usuario;
+    companyLocked = !!currentUser.empresaAsignada;
+    if(companyLocked) currentCompany = currentUser.empresaAsignada;
+
+    document.getElementById('login').style.display='none';
+    document.getElementById('mainApp').style.display='block';
+    document.getElementById('userLabel').textContent = currentUser.nombre + ' · ' + currentUser.rol + (companyLocked ? ' · '+currentCompany : '');
+    document.getElementById('btnUploadToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
+    document.getElementById('btnManualToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
+    document.getElementById('btnNoProgramado').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
+
+    setUpCompanyButtons();
+    await cargarPedidos();
+  } catch(err){
+    errEl.textContent = 'Error de conexión: ' + err.message;
+  }
+}
+function logout(){
+  currentUser = null;
+  pedidosCache = {}; entregasCache = {};
+  document.getElementById('pinInput').value='';
+  document.getElementById('mainApp').style.display='none';
+  document.getElementById('login').style.display='flex';
+}
+function setUpCompanyButtons(){
+  const btnC = document.getElementById('btn-contubos');
+  const btnT = document.getElementById('btn-tecnipapel');
+  btnC.classList.toggle('active', currentCompany==='Contubos');
+  btnT.classList.toggle('active', currentCompany==='Tecnipapel');
+  btnC.disabled = companyLocked && currentCompany!=='Contubos';
+  btnT.disabled = companyLocked && currentCompany!=='Tecnipapel';
+}
+async function setCompany(c){
+  if(companyLocked){ showToast('Tu usuario solo tiene acceso a una empresa.'); return; }
+  currentCompany = c;
+  currentDayFilter = 'hoy';
+  currentFilter = 'principal';
+  document.querySelectorAll('.stat-card').forEach(card=>card.classList.remove('tab-active'));
+  document.getElementById('historialPanel').style.display='none';
+  document.getElementById('futuroMenu').style.display='none';
+  setUpCompanyButtons();
+  await cargarPedidos();
+}
+
+// ---------- CARGAR PEDIDOS ----------
+async function cargarPedidos(){
+  document.getElementById('orderList').innerHTML = '<div class="loading">Cargando pedidos...</div>';
+  try{
+    const [dataPedidos, dataNoProg] = await Promise.all([
+      llamarAPI({ accion:'getPedidos', empresa: currentCompany }),
+      llamarAPI({ accion:'getNoProgramados', empresa: currentCompany })
+    ]);
+    if(dataPedidos.ok){
+      pedidosCache[currentCompany] = dataPedidos.pedidos;
+      noProgramadosCache[currentCompany] = dataNoProg.ok ? dataNoProg.noProgramados : [];
+      render();
+    } else {
+      document.getElementById('orderList').innerHTML = '<div class="empty">Error cargando pedidos: '+(dataPedidos.error||'')+'</div>';
+    }
+  } catch(err){
+    document.getElementById('orderList').innerHTML = '<div class="empty">Error de conexión: '+err.message+'</div>';
+  }
+}
+
+// ---------- CLASIFICACIÓN POR DÍA ----------
+function parseFechaStr(f){
+  if(!f || f==='Abierta') return null;
+  const partes = String(f).split('/').map(Number);
+  if(partes.length!==3) return null;
+  return new Date(partes[2], partes[1]-1, partes[0]);
+}
+function hoyRef(){
+  const d = new Date(); d.setHours(0,0,0,0); return d;
+}
+function dayTabLabel(f){
+  const d = parseFechaStr(f);
+  if(!d) return 'Sin fecha · '+f;
+  const diff = Math.round((d - hoyRef())/86400000);
+  if(diff===0) return 'Hoy · '+f.slice(0,5);
+  if(diff===1) return 'Mañana · '+f.slice(0,5);
+  const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const cap = s=>s.charAt(0).toUpperCase()+s.slice(1);
+  return cap(dias[d.getDay()])+' · '+f.slice(0,5);
+}
+// Un pedido se considera atrasado si su fecha ya pasó y no está Completado —
+// sin importar si la columna Estado en el Sheet todavía dice "Pendiente" o "Parcial"
+// (nada la cambia sola con el tiempo; esta detección es la que corrige eso).
+function esAtrasado(o){
+  if(o.Estado === 'Atrasado') return true;
+  const d = parseFechaStr(o.Fecha_Entrega);
+  if(!d) return false; // "Abierta" no cuenta como atrasado automáticamente
+  const diff = Math.round((d - hoyRef())/86400000);
+  return diff < 0;
+}
+// Detecta si el pedido es "cliente recoge" (transportador = el mismo cliente, aunque sea de otra ciudad):
+// por la bandera guardada al cargar la planilla, o como respaldo, buscando el texto en las notas.
+function esClienteRecoge(o){
+  if(String(o.Es_Cliente_Recoge).toUpperCase()==='TRUE') return true;
+  return /cliente\s*recoge/i.test(o.Notas_Planilla || '');
+}
+function dayCategory(o){
+  const d = parseFechaStr(o.Fecha_Entrega);
+  if(!d) return 'hoy'; // "Abierta"
+  const diff = Math.round((d - hoyRef())/86400000);
+  if(diff < 0) return o.Estado==='Completado' ? 'historial' : 'hoy';
+  if(diff === 0) return 'hoy';
+  return 'futuro';
+}
+
+// ---------- FILTROS Y CONTROLES ----------
+function setStatFilter(f){
+  currentFilter = (currentFilter === f) ? 'principal' : f; // clic de nuevo = volver a la vista principal
+  document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('tab-active'));
+  if(currentFilter !== 'principal'){
+    document.getElementById('tab-'+currentFilter).classList.add('tab-active');
+  }
+  const hint = document.getElementById('tabHint');
+  const nombres = { pendiente:'Pendientes hoy', atrasado:'Atrasados', parcial:'Parciales en curso', completado:'Completados hoy', noprogramado:'No programados' };
+  hint.textContent = currentFilter==='principal'
+    ? 'Mostrando: pendientes sin despacho + atrasados. Haz clic en un recuadro de arriba para ver esa categoría por separado (clic de nuevo para volver aquí).'
+    : `Mostrando solo: ${nombres[currentFilter]}. Haz clic de nuevo en el recuadro para volver a la vista principal.`;
+  render();
+}
+function setDayFilter(f){
+  currentDayFilter = f;
+  document.getElementById('futuroMenu').style.display='none';
+  render();
+}
+function toggleFuturoMenu(){
+  const m = document.getElementById('futuroMenu');
+  m.style.display = (m.style.display==='none') ? 'block' : 'none';
+}
+function toggleHistorialPanel(){
+  const p = document.getElementById('historialPanel');
+  const list = (pedidosCache[currentCompany]||[]).filter(o=>dayCategory(o)==='historial');
+  document.getElementById('historialList').innerHTML = list.length ? list.map(o=>`
+    <div class="entrega-item">
+      <div><div style="font-weight:600;">${o.Razon_Social_Cliente} <span style="font-weight:400;color:var(--ink-soft);">— ${o.Referencia}</span></div>
+      <div class="entrega-date">OC ${o.OC_Cliente} · ${o.Fecha_Entrega} · ${Number(o.Cantidad_Entregada).toLocaleString()} unds completadas</div></div>
+      <span class="status-pill status-Completado">Completado</span>
+    </div>`).join('') : `<div class="readonly-note">Aún no hay pedidos completados de días anteriores para ${currentCompany}.</div>`;
+  p.style.display = (p.style.display==='none') ? 'block' : 'none';
+}
+function toggleUploadPanel(){
+  const p = document.getElementById('uploadPanel');
+  p.style.display = (p.style.display==='none') ? 'block' : 'none';
+}
+function toggleManualPanel(){
+  const p = document.getElementById('manualPanel');
+  p.style.display = (p.style.display==='none') ? 'block' : 'none';
+}
+function toggleNoProgramado(){
+  const f = document.getElementById('noProgramadoForm');
+  f.style.display = (f.style.display==='none') ? 'block' : 'none';
+}
+
+// ---------- RENDER ----------
+function render(){
+  const list = pedidosCache[currentCompany] || [];
+  const noProgList = noProgramadosCache[currentCompany] || [];
+
+  const futuros = list.filter(o=>dayCategory(o)==='futuro');
+  const fechasFuturas = [...new Set(futuros.map(o=>o.Fecha_Entrega))].sort((a,b)=>parseFechaStr(a)-parseFechaStr(b));
+  document.getElementById('futuroCount').textContent = fechasFuturas.length ? `(${futuros.length})` : '';
+  const menu = document.getElementById('futuroMenu');
+  menu.innerHTML = fechasFuturas.length===0
+    ? `<div style="padding:8px 10px;font-size:12px;color:var(--ink-soft);">No hay programaciones futuras cargadas aún.</div>`
+    : fechasFuturas.map(f=>`<div onclick="setDayFilter('${f}')" style="padding:8px 10px;font-size:12.5px;border-radius:7px;cursor:pointer;${currentDayFilter===f?'background:var(--magenta-soft);color:var(--magenta);font-weight:600;':''}">${dayTabLabel(f)} <span style="color:var(--ink-soft);font-weight:400;">· ${list.filter(o=>o.Fecha_Entrega===f).length} pedidos</span></div>`).join('') + `<div onclick="setDayFilter('hoy')" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--line);padding-left:10px;font-size:11.5px;color:var(--ink-soft);cursor:pointer;">← Volver a hoy</div>`;
+
+  const label = document.getElementById('viewingLabel');
+  label.innerHTML = currentDayFilter==='hoy'
+    ? 'Mostrando: Hoy · '+hoyRef().toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'})
+    : `Viendo: <span style="color:var(--magenta);">${dayTabLabel(currentDayFilter)}</span> <a href="#" onclick="setDayFilter('hoy');return false;" style="color:var(--ink-soft);text-decoration:underline;margin-left:6px;">volver a hoy</a>`;
+
+  // Contadores de los recuadros/pestañas (siempre sobre el día que se está viendo)
+  const enDia = currentDayFilter==='hoy' ? list.filter(o=>dayCategory(o)==='hoy') : list.filter(o=>o.Fecha_Entrega===currentDayFilter);
+  document.getElementById('stat-pend').textContent = enDia.filter(o=>o.Estado==='Pendiente' && Number(o.Cantidad_Entregada)===0 && !esAtrasado(o)).length;
+  document.getElementById('stat-atra').textContent = enDia.filter(o=>esAtrasado(o) && o.Estado!=='Completado').length;
+  document.getElementById('stat-parc').textContent = enDia.filter(o=>o.Estado==='Parcial' && !esAtrasado(o)).length;
+  document.getElementById('stat-comp').textContent = enDia.filter(o=>o.Estado==='Completado').length;
+  document.getElementById('stat-noprog').textContent = noProgList.filter(n=>n.Estado_Vinculo==='Pendiente').length;
+
+  const container = document.getElementById('orderList');
+
+  // Pestaña "No programados" tiene su propia vista, distinta a los pedidos normales
+  if(currentFilter === 'noprogramado'){
+    const pendientesNP = noProgList.filter(n=>n.Estado_Vinculo==='Pendiente');
+    container.innerHTML = pendientesNP.length===0
+      ? `<div class="empty"><div class="big">📭</div>No hay despachos no programados pendientes de vincular para ${currentCompany}.</div>`
+      : pendientesNP.map(n=>`
+        <div class="order">
+          <div class="detail-inner" style="padding:16px 20px;grid-template-columns:1fr;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div class="client">${n.Razon_Social_Cliente}</div>
+                <div class="ref">${n.Referencia}</div>
+                <div class="oc" style="margin-top:6px;">OC ${n.OC_Cliente}${n.PVT ? ' · PVT '+n.PVT : ''} · ${n.Ciudad} · Registrado el ${n.Fecha_Registro} por ${n.Registrado_Por}</div>
+                <div class="oc">Autorizado por: <strong>${n.Autorizado_Por||'-'}</strong></div>
+              </div>
+              <div style="text-align:right;">
+                <div class="qty">${Number(n.Cantidad_Despachada).toLocaleString()} unds</div>
+                <div class="oc">${n.Transportador||'sin transportador'}</div>
+              </div>
+            </div>
+          </div>
+        </div>`).join('');
+    return;
+  }
+
+  const byStatus = currentFilter==='principal'
+    ? list.filter(o=>(esAtrasado(o) && o.Estado!=='Completado') || (o.Estado==='Pendiente' && Number(o.Cantidad_Entregada)===0))
+    : currentFilter==='pendiente' ? list.filter(o=>o.Estado==='Pendiente' && Number(o.Cantidad_Entregada)===0 && !esAtrasado(o))
+    : currentFilter==='atrasado' ? list.filter(o=>esAtrasado(o) && o.Estado!=='Completado')
+    : currentFilter==='parcial' ? list.filter(o=>o.Estado==='Parcial' && !esAtrasado(o))
+    : currentFilter==='completado' ? list.filter(o=>o.Estado==='Completado')
+    : list;
+  const filtered = currentDayFilter==='hoy' ? byStatus.filter(o=>dayCategory(o)==='hoy') : byStatus.filter(o=>o.Fecha_Entrega===currentDayFilter);
+
+  if(filtered.length===0){
+    container.innerHTML = `<div class="empty"><div class="big">📭</div>No hay pedidos en este filtro para ${currentCompany}.</div>`;
+    return;
+  }
+  const canEdit = currentUser.rol !== 'Consulta';
+  container.innerHTML = filtered.map((o,i)=>{
+    const esAbierta = String(o.Cantidad_Total).trim().toLowerCase() === 'abierta';
+    const total = esAbierta ? 0 : (Number(o.Cantidad_Total)||0);
+    const entregado = Number(o.Cantidad_Entregada)||0;
+    const pct = (!esAbierta && total>0) ? Math.round((entregado/total)*100) : 0;
+    const key = o.ID_Pedido;
+    return `
+    <div class="order" id="order-${key}">
+      <div class="order-row" onclick="toggleOrder('${key}')">
+        <div><div class="cell-label">Cliente</div><div class="client">${o.Razon_Social_Cliente}</div><div class="ref">${o.Referencia}</div></div>
+        <div><div class="cell-label">OC / PVT</div><div class="oc">OC ${o.OC_Cliente} · PVT ${o.PVT||'-'}</div><div class="oc">Entrega: ${o.Fecha_Entrega}</div></div>
+        <div><div class="cell-label">Ciudad</div><span class="city-badge">${o.Ciudad}</span>${esClienteRecoge(o) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:#DCEEFB;color:#1B6FBF;">🚗 Recoge cliente</span></div>` : ''}</div>
+        <div><div class="cell-label">Cantidad</div><div class="qty">${esAbierta ? entregado.toLocaleString()+' unds' : entregado.toLocaleString()+' <span class="of">/ '+total.toLocaleString()+'</span>'}</div></div>
+        <div><div class="cell-label">Avance</div>${esAbierta
+          ? `<span class="status-pill" style="background:#F0E6FB;color:#7A3FBF;">Cantidad abierta</span>`
+          : `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div><div class="progress-pct">${pct}% completado</div>`}</div>
+        <div>
+          <span class="status-pill status-${o.Estado}">${o.Estado}</span>
+          ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
+        </div>
+        <div class="chevron">›</div>
+      </div>
+      <div class="order-detail" id="detail-${key}">
+        <div class="detail-inner"><div class="loading" style="grid-column:1/-1;">Cargando detalle...</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleOrder(key){
+  const el = document.getElementById('order-'+key);
+  const willOpen = !el.classList.contains('open');
+  el.classList.toggle('open');
+  if(willOpen) await pintarDetalle(key);
+}
+
+async function pintarDetalle(idPedido){
+  const list = pedidosCache[currentCompany]||[];
+  const o = list.find(p=>p.ID_Pedido===idPedido);
+  if(!o) return;
+  const canEdit = currentUser.rol !== 'Consulta';
+
+  if(!entregasCache[idPedido]){
+    try{
+      const data = await llamarAPI({ accion:'getEntregas', idPedido });
+      entregasCache[idPedido] = data.ok ? data.entregas : [];
+    } catch(err){ entregasCache[idPedido] = []; }
+  }
+  const entregas = entregasCache[idPedido];
+
+  const detailEl = document.getElementById('detail-'+idPedido);
+  detailEl.innerHTML = `
+    <div class="detail-inner">
+      <div>
+        ${o.Notas_Planilla ? `<div class="novedad-tag" style="margin-bottom:10px;display:inline-block;">📋 ${o.Notas_Planilla}</div>` : ''}
+        <h4>Historial de entregas</h4>
+        ${entregas.length ? entregas.map(e=>`
+          <div class="entrega-item">
+            <div><div>${Number(e.Cantidad_Despachada).toLocaleString()} unidades — ${e.Transportador||'sin transportador'}</div>
+            ${e.Tipo_Novedad && e.Tipo_Novedad!=='Sin novedad' ? `<span class="novedad-tag">${e.Tipo_Novedad}${e.Detalle_Novedad ? ': '+e.Detalle_Novedad : ''}</span>` : ''}
+            ${e.Duracion_Cargue_Min ? `<div class="entrega-date">Cargue: ${e.Hora_Inicio_Cargue} → ${e.Hora_Fin_Cargue} (${e.Duracion_Cargue_Min} min)</div>` : ''}</div>
+            <div class="entrega-date">${e.Fecha_Entrega}</div>
+          </div>`).join('') : '<div class="entrega-item">Aún no se registran entregas.</div>'}
+
+        ${(esAtrasado(o) && o.Estado!=='Completado') ? `
+          <div class="reason-box">
+            <div class="title">⚠ Despacho no cumplido — requiere razón</div>
+            ${canEdit ? `
+              <textarea placeholder="Ej: Transporte reasignado, se despacha mañana." id="razon-${idPedido}"></textarea>
+              <label style="margin-top:8px;">Nueva fecha</label>
+              <input type="date" id="nuevaFecha-${idPedido}" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;">
+              <button style="margin-top:8px;background:var(--ink);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;width:100%;" onclick="guardarRazon('${idPedido}')">Guardar razón y reprogramar</button>
+            ` : `<div class="readonly-note">Pedido atrasado, en espera de razón.</div>`}
+          </div>` : ''}
+      </div>
+      <div>
+        <h4>Registrar nueva entrega</h4>
+        ${canEdit ? `
+          <div class="add-entrega">
+            <label>Control de tiempo de cargue</label>
+            <div style="margin-bottom:12px;" id="cargueBtnWrap-${idPedido}">
+              <button type="button" id="btnIniciar-${idPedido}" onclick="iniciarCargue('${idPedido}')" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>
+            </div>
+            <div id="cargueTime-${idPedido}" style="margin-bottom:12px;font-size:11.5px;color:var(--ink-soft);">Aún no se ha iniciado el cargue.</div>
+            <label>${esClienteRecoge(o) ? 'Quién recoge (nombre y documento/placa)' : 'Transportador'}</label>
+            <input type="text" id="transp-${idPedido}" placeholder="${esClienteRecoge(o) ? 'Ej: Juan Pérez, CC 123456 / placa ABC123' : 'Ej: Coordinadora'}">
+            <label>Cantidad despachada</label><input type="number" id="cant-${idPedido}" placeholder="Ej: 2000">
+            <label>Novedad</label>
+            <select id="nov-${idPedido}" onchange="toggleNovedadDetalle(this,'${idPedido}')">
+              <option value="Sin novedad">Sin novedad</option>
+              <option value="Faltante de cantidad">Faltante de cantidad</option>
+              <option value="Stickers pendientes">Stickers pendientes</option>
+              <option value="Observación de calidad">Observación de calidad</option>
+              <option value="Pendiente entrada en sistema">Pendiente entrada en sistema</option>
+            </select>
+            <div id="novDetalle-${idPedido}" style="display:none;"><label>Describe qué sucedió</label><textarea id="novTexto-${idPedido}" rows="2"></textarea></div>
+            <button onclick="registrarEntrega('${idPedido}')" style="background:var(--danger);">⏹ Finalizar cargue y registrar entrega</button>
+          </div>` : `<div class="readonly-note">Tu rol es de consulta — puedes ver el estado del pedido pero no registrar entregas.</div>`}
+      </div>
+    </div>`;
+}
+
+function toggleNovedadDetalle(sel, key){
+  document.getElementById('novDetalle-'+key).style.display = (sel.value==='Sin novedad') ? 'none' : 'block';
+}
+
+// ---------- CARGUE (inicio/fin) ----------
+const cargueState = {};
+function fmtHora(d){
+  // Formato 24h garantizado (HH:mm:ss) — necesario para que el backend calcule bien la duración del cargue
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  const ss = String(d.getSeconds()).padStart(2,'0');
+  return `${hh}:${mm}:${ss}`;
+}
+function iniciarCargue(key){
+  cargueState[key] = { inicio:new Date(), fin:null };
+  const wrap = document.getElementById('cargueBtnWrap-'+key);
+  if(wrap) wrap.style.display = 'none';
+  const timeEl = document.getElementById('cargueTime-'+key);
+  timeEl.style.background = 'var(--ok-soft)';
+  timeEl.style.border = '1px solid var(--ok)';
+  timeEl.style.borderRadius = '8px';
+  timeEl.style.padding = '10px 12px';
+  timeEl.style.fontSize = '13px';
+  timeEl.style.fontWeight = '700';
+  timeEl.style.color = 'var(--ok)';
+  timeEl.innerHTML = `✅ Cargue iniciado a las ${fmtHora(cargueState[key].inicio)} — en curso...`;
+}
+
+// ---------- ACCIONES REALES CONTRA EL BACKEND ----------
+async function registrarEntrega(idPedido){
+  const c = cargueState[idPedido];
+  if(!c || !c.inicio){ showToast('⚠ Primero da clic en "Inicio de cargue" antes de finalizar.'); return; }
+
+  const cantidad = document.getElementById('cant-'+idPedido).value;
+  if(!cantidad || Number(cantidad)<=0){ showToast('Ingresa una cantidad válida.'); return; }
+  const transportador = document.getElementById('transp-'+idPedido).value;
+  const tipoNovedad = document.getElementById('nov-'+idPedido).value;
+  const detalleNovedad = document.getElementById('novTexto-'+idPedido) ? document.getElementById('novTexto-'+idPedido).value : '';
+
+  // "Finalizar cargue" captura la hora de fin en este mismo clic
+  if(!c.fin){ c.fin = new Date(); }
+  const horaInicio = fmtHora(c.inicio);
+  const horaFin = fmtHora(c.fin);
+
+  showToast('Registrando entrega...');
+  try{
+    const data = await llamarAPI({ accion:'registrarEntrega', idPedido, cantidad, transportador, tipoNovedad, detalleNovedad, horaInicio, horaFin, registradoPor: currentUser.nombre });
+    if(data.ok){
+      showToast('✅ Entrega registrada correctamente.');
+      delete entregasCache[idPedido];
+      delete cargueState[idPedido];
+      await cargarPedidos();
+      document.getElementById('order-'+idPedido).classList.add('open');
+      await pintarDetalle(idPedido);
+    } else { showToast('Error: '+data.error); }
+  } catch(err){ showToast('Error de conexión: '+err.message); }
+}
+
+
+async function guardarRazon(idPedido){
+  const razon = document.getElementById('razon-'+idPedido).value.trim();
+  const nuevaFecha = document.getElementById('nuevaFecha-'+idPedido).value;
+  if(!razon){ showToast('Escribe una razón antes de guardar.'); return; }
+  const list = pedidosCache[currentCompany]||[];
+  const o = list.find(p=>p.ID_Pedido===idPedido);
+  const nuevaFechaFmt = nuevaFecha ? nuevaFecha.split('-').reverse().join('/') : '';
+
+  showToast('Guardando razón...');
+  try{
+    const data = await llamarAPI({ accion:'registrarRazonAtraso', idPedido, fechaProgramadaOriginal:o.Fecha_Entrega, razon, registradoPor:currentUser.nombre, nuevaFechaProgramada:nuevaFechaFmt });
+    if(data.ok){ showToast('✅ Razón guardada, pedido reprogramado.'); await cargarPedidos(); }
+    else { showToast('Error: '+data.error); }
+  } catch(err){ showToast('Error de conexión: '+err.message); }
+}
+
+async function registrarNoProgramado(){
+  const payload = {
+    accion:'registrarNoProgramado',
+    empresa: currentCompany,
+    ocCliente: document.getElementById('npOc').value,
+    pvt: document.getElementById('npPvt').value,
+    cliente: document.getElementById('npCliente').value,
+    referencia: document.getElementById('npReferencia').value,
+    ciudad: document.getElementById('npCiudad').value,
+    cantidad: document.getElementById('npCantidad').value,
+    transportador: document.getElementById('npTransportador').value,
+    autorizadoPor: document.getElementById('npAutorizadoPor').value.trim(),
+    registradoPor: currentUser.nombre
+  };
+  if(!payload.ocCliente || !payload.cantidad){ showToast('Completa al menos la OC y la cantidad.'); return; }
+  if(!payload.autorizadoPor){ showToast('El campo "Autorizado por" es obligatorio.'); return; }
+  showToast('Registrando despacho no programado...');
+  try{
+    const data = await llamarAPI(payload);
+    if(data.ok){ showToast('✅ Registrado — se vinculará al cargar la planilla con esa OC.'); document.getElementById('noProgramadoForm').style.display='none'; await cargarPedidos(); }
+    else { showToast('Error: '+data.error); }
+  } catch(err){ showToast('Error de conexión: '+err.message); }
+}
+
+// ---------- CARGA REAL DESDE EXCEL (Fase 2) ----------
+let excelParsedRows = [];
+
+// Normaliza encabezados para que "OC CLIENTE", "oc cliente ", "OC_CLIENTE" etc. se reconozcan igual
+function normalizarEncabezado_(h){
+  return String(h||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+// Mapa de encabezados esperados (según tu planilla real) a nuestros campos internos
+const MAPA_COLUMNAS = {
+  'OC CLIENTE': 'ocCliente',
+  'OC': 'ocCliente',
+  'PVT': 'pvt',
+  'RAZON SOCIAL CLIENTE': 'cliente',
+  'RAZON SOCIAL': 'cliente',
+  'CLIENTE': 'cliente',
+  'REFERENCIA': 'referencia',
+  'FECHA DE ENTREGA': 'fecha',
+  'FECHA ENTREGA': 'fecha',
+  'CANTIDAD DESPACHO': 'cantidad',
+  'CANTIDAD': 'cantidad',
+  'CIUDAD': 'ciudad',
+  'NOVEDADES': 'notas',
+  'NOVEDAD': 'notas'
+};
+
+// Convierte lo que venga en la celda de fecha (texto dd/mm/yyyy, o número serial de Excel, o "ABIERTA") a texto dd/MM/yyyy
+function normalizarFechaExcel_(valor){
+  if(valor === undefined || valor === null || valor === '') return '';
+  if(typeof valor === 'string'){
+    const t = valor.trim();
+    if(/^abiert/i.test(t)) return 'Abierta';
+    // ya viene como dd/mm/yyyy
+    if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t)){
+      const [d,m,y] = t.split('/');
+      return `${d.padStart(2,'0')}/${m.padStart(2,'0')}/${y}`;
+    }
+    return t; // texto libre, se deja tal cual (ej: se revisa en la vista previa)
+  }
+  if(typeof valor === 'number'){
+    // Número serial de Excel -> fecha real
+    const fecha = XLSX.SSF.parse_date_code(valor);
+    if(!fecha) return '';
+    const d = String(fecha.d).padStart(2,'0');
+    const m = String(fecha.m).padStart(2,'0');
+    return `${d}/${m}/${fecha.y}`;
+  }
+  return String(valor);
+}
+
+function procesarExcel(event){
+  const file = event.target.files[0];
+  if(!file) return;
+
+  const fechaSeleccionada = document.getElementById('excelFecha').value;
+  if(!fechaSeleccionada){
+    showToast('⚠ Primero indica para qué día es esta planilla, arriba del botón de subir archivo.');
+    event.target.value = '';
+    return;
+  }
+  const fechaFormateada = fechaSeleccionada.split('-').reverse().join('/');
+
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type:'array', cellDates:false });
+      const primeraHoja = workbook.Sheets[workbook.SheetNames[0]];
+      const filas = XLSX.utils.sheet_to_json(primeraHoja, { header:1, raw:true, defval:'' });
+
+      if(filas.length < 2){ showToast('El archivo no tiene filas de datos.'); return; }
+
+      // La planilla suele traer un título/logo arriba (como "PEDIDOS REALIZADOS...") antes de los
+      // encabezados reales, así que buscamos entre las primeras 10 filas cuál es la fila de encabezados
+      // (la que contenga "OC CLIENTE" o similar), en vez de asumir que siempre es la fila 1.
+      let filaEncabezado = -1;
+      let columnasEncontradas = [];
+      for(let f=0; f<Math.min(10, filas.length); f++){
+        const candidatos = filas[f].map(normalizarEncabezado_);
+        const mapeo = candidatos.map(h => MAPA_COLUMNAS[h] || null);
+        if(mapeo.includes('ocCliente') && (mapeo.includes('cantidad') || mapeo.includes('referencia'))){
+          filaEncabezado = f;
+          columnasEncontradas = mapeo;
+          break;
+        }
+      }
+
+      if(filaEncabezado === -1){
+        showToast('No se reconocieron las columnas OC CLIENTE y/o CANTIDAD — revisa los encabezados del archivo.');
+        return;
+      }
+
+      excelParsedRows = [];
+      for(let i=filaEncabezado+1; i<filas.length; i++){
+        const fila = filas[i];
+        if(!fila || fila.join('')==='') continue;
+        const obj = { empresa: currentCompany, fecha: fechaFormateada };
+        columnasEncontradas.forEach((campo, idx) => {
+          if(!campo || campo === 'fecha') return; // la fecha la define el selector de arriba, no la columna del Excel
+          let valor = fila[idx];
+          if(campo === 'cantidad' && (valor === '' || valor === undefined || valor === null)) valor = 'Abierta';
+          obj[campo] = valor !== undefined && valor !== null ? valor : '';
+        });
+        if(obj.ocCliente) excelParsedRows.push(obj);
+      }
+
+      pintarPreviewExcel();
+    } catch(err){
+      showToast('Error leyendo el archivo: '+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function pintarPreviewExcel(){
+  const wrap = document.getElementById('excelPreviewWrap');
+  const header = document.getElementById('excelPreviewHeader');
+  const body = document.getElementById('excelPreviewBody');
+  const summary = document.getElementById('excelPreviewSummary');
+
+  if(excelParsedRows.length === 0){
+    wrap.style.display='none';
+    showToast('No se encontraron filas válidas (verifica que tengan OC Cliente).');
+    return;
+  }
+
+  const cols = ['fecha','ocCliente','pvt','cliente','referencia','ciudad','cantidad','notas'];
+  const nombres = { fecha:'Fecha', ocCliente:'OC', pvt:'PVT', cliente:'Cliente', referencia:'Referencia', ciudad:'Ciudad', cantidad:'Cantidad', notas:'Novedades' };
+  header.innerHTML = cols.map(c=>`<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);">${nombres[c]}</th>`).join('');
+  body.innerHTML = excelParsedRows.map(r=>`
+    <tr style="border-bottom:1px solid var(--line);">
+      ${cols.map(c=>`<td style="padding:6px 8px;${c==='fecha' && !r[c] ? 'color:var(--danger);' : ''}">${r[c]||(c==='fecha'?'⚠ sin fecha':'')}</td>`).join('')}
+    </tr>`).join('');
+
+  const sinFecha = excelParsedRows.filter(r=>!r.fecha).length;
+  const fechaLote = excelParsedRows.length ? excelParsedRows[0].fecha : '';
+  summary.innerHTML = `Se detectaron <strong>${excelParsedRows.length}</strong> pedidos para <strong>${currentCompany}</strong>, todos programados para <strong>${fechaLote}</strong>.`;
+
+  wrap.style.display = 'block';
+}
+
+async function confirmarCargaExcel(){
+  if(excelParsedRows.length === 0){ showToast('No hay pedidos para cargar.'); return; }
+  showToast('Cargando pedidos desde Excel...');
+  try{
+    const data = await llamarAPI({
+      accion:'cargarPlanilla',
+      empresa: currentCompany,
+      cargadoPor: currentUser.nombre,
+      pedidos: excelParsedRows
+    });
+    if(data.ok){
+      showToast(`✅ ${data.pedidosCargados} pedidos cargados correctamente.`);
+      excelParsedRows = [];
+      document.getElementById('excelPreviewWrap').style.display='none';
+      document.getElementById('excelFile').value='';
+      document.getElementById('excelFecha').value='';
+      document.getElementById('uploadPanel').style.display='none';
+      await cargarPedidos();
+    } else { showToast('Error: '+data.error); }
+  } catch(err){ showToast('Error de conexión: '+err.message); }
+}
+
+async function cargarPedidoManual(){
+  const fechaRaw = document.getElementById('upFecha').value;
+  const fecha = fechaRaw ? fechaRaw.split('-').reverse().join('/') : '';
+  const payload = {
+    accion:'cargarPlanilla',
+    empresa: currentCompany,
+    fecha,
+    cargadoPor: currentUser.nombre,
+    pedidos: [{
+      ocCliente: document.getElementById('upOc').value,
+      pvt: document.getElementById('upPvt').value,
+      cliente: document.getElementById('upCliente').value,
+      referencia: document.getElementById('upReferencia').value,
+      ciudad: document.getElementById('upCiudad').value,
+      cantidad: document.getElementById('upCantidad').value
+    }]
+  };
+  if(!fecha || !payload.pedidos[0].ocCliente || !payload.pedidos[0].cantidad){ showToast('Completa al menos fecha, OC y cantidad.'); return; }
+  showToast('Cargando pedido...');
+  try{
+    const data = await llamarAPI(payload);
+    if(data.ok){ showToast('✅ Pedido cargado.'); document.getElementById('manualPanel').style.display='none'; await cargarPedidos(); }
+    else { showToast('Error: '+data.error); }
+  } catch(err){ showToast('Error de conexión: '+err.message); }
+}
+</script>
+</body>
+</html>
