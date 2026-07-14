@@ -434,6 +434,16 @@ function logout(){
   pinActual = '';
   renderPinDots();
   localStorage.removeItem('despachoPT_sesion');
+
+  // Limpia también el modo de selección múltiple, para que no se quede la barra/overlay flotando en el login
+  modoSeleccion = false;
+  seleccionados.clear();
+  cargueBatch = { inicio: null, fin: null };
+  document.getElementById('floatbar').classList.remove('show');
+  document.getElementById('overlaySeleccion').classList.remove('show');
+  const btnSel = document.getElementById('btnModoSeleccion');
+  if(btnSel){ btnSel.classList.remove('active'); btnSel.textContent = '☑ Selección múltiple'; }
+
   document.getElementById('mainApp').style.display='none';
   document.getElementById('login').style.display='flex';
 }
@@ -747,6 +757,10 @@ function abrirConsolidado(){
   }).join('');
 
   document.getElementById('overlaySeleccion').classList.add('show');
+  // Asegura que el control de cargue quede visible desde el primer momento (en algunos celulares
+  // el modal podía abrir con el scroll desplazado y esa parte quedaba oculta arriba).
+  const sheetEl = document.querySelector('#overlaySeleccion .sheet');
+  if(sheetEl) sheetEl.scrollTop = 0;
 }
 function cerrarConsolidado(){
   document.getElementById('overlaySeleccion').classList.remove('show');
