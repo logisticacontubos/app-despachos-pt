@@ -15,6 +15,8 @@
     --radius: 14px;
   }
   *{box-sizing:border-box;}
+  /* Evita que el celular acerque la pantalla al tocar un campo (pasa cuando el texto es menor a 16px) */
+  input, select, textarea{ font-size:16px !important; }
   body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
   .app{max-width:1180px;margin:0 auto;padding:0 20px 60px;}
 
@@ -139,6 +141,13 @@
     .order-row{grid-template-columns:1fr; row-gap:8px;}
     .cell-label{display:block;}
     .detail-inner{grid-template-columns:1fr;}
+  }
+  @media (max-width:480px){
+    .app{padding:0 14px 70px;}
+    .filters button, .upload-btn{min-height:40px;}
+    .add-entrega button, .confirm-btn{min-height:46px;}
+    .floatbar{padding:12px 14px;flex-wrap:wrap;gap:8px;}
+    .stat-card{padding:14px 16px;}
   }
 </style>
 </head>
@@ -816,10 +825,14 @@ async function confirmarDespachoMultiple(){
   try{
     for(const r of registros){
       const data = await llamarAPI({ accion:'registrarEntrega', idPedido:r.idPedido, cantidad:r.cantidad, transportador, tipoNovedad:r.tipoNovedad, detalleNovedad:r.detalleNovedad, horaInicio, horaFin, registradoPor: currentUser.nombre });
-      if(data.ok && r.razon){
-        const list = pedidosCache[currentCompany]||[];
-        const o = list.find(p=>p.ID_Pedido===r.idPedido);
-        await llamarAPI({ accion:'registrarRazonAtraso', idPedido:r.idPedido, fechaProgramadaOriginal:o?o.Fecha_Entrega:'', razon:r.razon, registradoPor:currentUser.nombre });
+      if(data.ok){
+        actualizarPedidoLocal(r.idPedido, r.cantidad);
+        delete entregasCache[r.idPedido];
+        if(r.razon){
+          const list = pedidosCache[currentCompany]||[];
+          const o = list.find(p=>p.ID_Pedido===r.idPedido);
+          await llamarAPI({ accion:'registrarRazonAtraso', idPedido:r.idPedido, fechaProgramadaOriginal:o?o.Fecha_Entrega:'', razon:r.razon, registradoPor:currentUser.nombre });
+        }
       }
     }
     showToast(`✅ ${registros.length} entregas registradas correctamente.`);
@@ -829,7 +842,7 @@ async function confirmarDespachoMultiple(){
     document.getElementById('btnModoSeleccion').classList.remove('active');
     document.getElementById('btnModoSeleccion').textContent = '☑ Selección múltiple';
     actualizarFloatbar();
-    await cargarPedidos();
+    render(); // ya no vuelve a pedirle todo al backend — se actualizó en memoria arriba
   } catch(err){
     showToast('Error de conexión: '+err.message);
   }
@@ -953,6 +966,21 @@ function iniciarCargue(key){
 }
 
 // ---------- ACCIONES REALES CONTRA EL BACKEND ----------
+// Actualiza el pedido en memoria con el mismo cálculo que hace el backend, para reflejar
+// el cambio al instante en pantalla sin tener que volver a pedirle todo a Apps Script (que es lento).
+function actualizarPedidoLocal(idPedido, cantidadSumada){
+  const list = pedidosCache[currentCompany]||[];
+  const o = list.find(p=>p.ID_Pedido===idPedido);
+  if(!o) return;
+  const nuevaEntregada = (Number(o.Cantidad_Entregada)||0) + Number(cantidadSumada);
+  const totalNum = Number(o.Cantidad_Total);
+  const esAbierta = isNaN(totalNum);
+  o.Cantidad_Entregada = nuevaEntregada;
+  o.Estado = esAbierta ? 'Completado' : (nuevaEntregada >= totalNum ? 'Completado' : 'Parcial');
+  const hoy = hoyRef();
+  o.Fecha_Ultima_Entrega = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+}
+
 async function registrarEntrega(idPedido){
   const c = cargueState[idPedido];
   if(!c || !c.inicio){ showToast('⚠ Primero da clic en "Inicio de cargue" antes de finalizar.'); return; }
@@ -996,7 +1024,8 @@ async function registrarEntrega(idPedido){
       showToast('✅ Entrega registrada correctamente.');
       delete entregasCache[idPedido];
       delete cargueState[idPedido];
-      await cargarPedidos();
+      actualizarPedidoLocal(idPedido, cantidad); // actualiza al instante, sin esperar otra llamada al backend
+      render();
       document.getElementById('order-'+idPedido).classList.add('open');
       await pintarDetalle(idPedido);
     } else { showToast('Error: '+data.error); }
