@@ -23,9 +23,19 @@
   .login-card .brandmark{width:52px;height:52px;border-radius:14px;background:var(--magenta);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;color:white;font-weight:700;font-size:20px;}
   .login-card h1{font-size:19px;margin:0 0 4px;letter-spacing:-0.01em;}
   .login-card p.sub{color:var(--ink-soft);font-size:13px;margin:0 0 24px;}
-  .login-card input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:16px;text-align:center;letter-spacing:0.2em;margin-bottom:14px;font-family:inherit;}
-  .login-card button{width:100%;background:var(--magenta);color:white;border:none;padding:12px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;}
-  .login-error{color:var(--danger);font-size:12px;margin-top:10px;min-height:16px;}
+  .pin-dots{display:flex;justify-content:center;gap:10px;margin-bottom:22px;}
+  .pin-dots span{width:12px;height:12px;border-radius:50%;background:#E4E1DB;transition:.15s;}
+  .pin-dots span.filled{background:var(--magenta);}
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .keypad button{
+    width:100%;aspect-ratio:1;border-radius:50%;border:none;background:#FAFAF8;
+    box-shadow:0 1px 2px rgba(43,43,43,0.06);font-size:20px;font-weight:600;color:var(--ink);
+    cursor:pointer;font-family:inherit;transition:.1s;
+  }
+  .keypad button:active{background:var(--magenta-soft);transform:scale(0.96);}
+  .keypad button.ghost{background:transparent;box-shadow:none;cursor:default;}
+  .keypad button.clear{font-size:14px;color:var(--ink-soft);font-weight:700;}
+  .login-error{color:var(--danger);font-size:12px;margin-top:16px;min-height:16px;}
 
   header.topbar{padding:22px 0 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
   .brand-row{display:flex;align-items:center;gap:12px;}
@@ -112,9 +122,23 @@
   <div class="login-card">
     <div class="brandmark">PT</div>
     <h1>Control de Despachos</h1>
-    <p class="sub">Producto Terminado — ingresa tu PIN</p>
-    <input type="tel" id="pinInput" placeholder="••••" maxlength="8" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
-    <button onclick="hacerLogin()">Ingresar</button>
+    <p class="sub">Producto Terminado</p>
+    <p class="sub" style="margin-bottom:14px;">Ingresa tu PIN</p>
+    <div class="pin-dots" id="pinDots"></div>
+    <div class="keypad">
+      <button type="button" onclick="tecla('1')">1</button>
+      <button type="button" onclick="tecla('2')">2</button>
+      <button type="button" onclick="tecla('3')">3</button>
+      <button type="button" onclick="tecla('4')">4</button>
+      <button type="button" onclick="tecla('5')">5</button>
+      <button type="button" onclick="tecla('6')">6</button>
+      <button type="button" onclick="tecla('7')">7</button>
+      <button type="button" onclick="tecla('8')">8</button>
+      <button type="button" onclick="tecla('9')">9</button>
+      <button type="button" class="ghost"></button>
+      <button type="button" onclick="tecla('0')">0</button>
+      <button type="button" class="clear" onclick="limpiarPin()">C</button>
+    </div>
     <div class="login-error" id="loginError"></div>
   </div>
 </div>
@@ -269,15 +293,50 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 2600);
 }
 
-// ---------- LOGIN ----------
+// ---------- LOGIN (teclado numérico) ----------
+let pinActual = '';
+
+function renderPinDots(){
+  const wrap = document.getElementById('pinDots');
+  const len = Math.max(pinActual.length, 4); // muestra mínimo 4 puntos, crece si el PIN es más largo
+  wrap.innerHTML = '';
+  for(let i=0; i<len; i++){
+    const dot = document.createElement('span');
+    if(i < pinActual.length) dot.classList.add('filled');
+    wrap.appendChild(dot);
+  }
+}
+function tecla(d){
+  if(pinActual.length >= 8) return;
+  pinActual += d;
+  document.getElementById('loginError').textContent = '';
+  renderPinDots();
+  clearTimeout(window._pinTimer);
+  if(pinActual.length >= 4){
+    window._pinTimer = setTimeout(hacerLogin, 350); // da chance a terminar de teclear un PIN más largo
+  }
+}
+function limpiarPin(){
+  pinActual = '';
+  clearTimeout(window._pinTimer);
+  document.getElementById('loginError').textContent = '';
+  renderPinDots();
+}
+renderPinDots();
+
 async function hacerLogin(){
-  const pin = document.getElementById('pinInput').value.trim();
+  const pin = pinActual;
   const errEl = document.getElementById('loginError');
   errEl.textContent = '';
   if(!pin){ errEl.textContent='Ingresa tu PIN.'; return; }
   try{
     const data = await llamarAPI({ accion:'login', pin });
-    if(!data.ok){ errEl.textContent = data.error || 'PIN incorrecto.'; return; }
+    if(!data.ok){
+      errEl.textContent = data.error || 'PIN incorrecto.';
+      pinActual = '';
+      renderPinDots();
+      return;
+    }
     currentUser = data.usuario;
     companyLocked = !!currentUser.empresaAsignada;
     if(companyLocked) currentCompany = currentUser.empresaAsignada;
@@ -298,7 +357,8 @@ async function hacerLogin(){
 function logout(){
   currentUser = null;
   pedidosCache = {}; entregasCache = {};
-  document.getElementById('pinInput').value='';
+  pinActual = '';
+  renderPinDots();
   document.getElementById('mainApp').style.display='none';
   document.getElementById('login').style.display='flex';
 }
@@ -553,34 +613,23 @@ async function pintarDetalle(idPedido){
 
   const detailEl = document.getElementById('detail-'+idPedido);
   detailEl.innerHTML = `
-    <div class="detail-inner">
+    <div class="detail-inner" style="grid-template-columns:1fr;max-width:520px;">
       <div>
-        ${o.Notas_Planilla ? `<div class="novedad-tag" style="margin-bottom:10px;display:inline-block;">📋 ${o.Notas_Planilla}</div>` : ''}
-        <h4>Historial de entregas</h4>
-        ${entregas.length ? entregas.map(e=>`
-          <div class="entrega-item">
-            <div><div>${Number(e.Cantidad_Despachada).toLocaleString()} unidades — ${e.Transportador||'sin transportador'}</div>
-            ${e.Tipo_Novedad && e.Tipo_Novedad!=='Sin novedad' ? `<span class="novedad-tag">${e.Tipo_Novedad}${e.Detalle_Novedad ? ': '+e.Detalle_Novedad : ''}</span>` : ''}
-            ${e.Duracion_Cargue_Min ? `<div class="entrega-date">Cargue: ${e.Hora_Inicio_Cargue} → ${e.Hora_Fin_Cargue} (${e.Duracion_Cargue_Min} min)</div>` : ''}</div>
-            <div class="entrega-date">${e.Fecha_Entrega}</div>
-          </div>`).join('') : '<div class="entrega-item">Aún no se registran entregas.</div>'}
-      </div>
-      <div>
+        ${o.Notas_Planilla ? `<div class="novedad-tag" style="margin-bottom:14px;display:inline-block;">📋 ${o.Notas_Planilla}</div>` : ''}
         <h4>Registrar nueva entrega</h4>
         ${canEdit ? `
           <div class="add-entrega">
-            ${(esAtrasado(o) && o.Estado!=='Completado') ? `
-              <div style="background:var(--danger-soft);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
-                <label style="color:var(--danger);">⚠ Despacho atrasado — razón</label>
-                <textarea placeholder="Ej: Transporte reasignado, se despacha mañana." id="razon-${idPedido}" style="margin-bottom:8px;"></textarea>
-                <button type="button" style="background:var(--danger);color:white;border:none;padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;width:100%;" onclick="guardarRazon('${idPedido}')">Guardar razón</button>
-              </div>
-            ` : ''}
             <label>Control de tiempo de cargue</label>
             <div style="margin-bottom:12px;" id="cargueBtnWrap-${idPedido}">
               <button type="button" id="btnIniciar-${idPedido}" onclick="iniciarCargue('${idPedido}')" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>
             </div>
             <div id="cargueTime-${idPedido}" style="margin-bottom:12px;font-size:11.5px;color:var(--ink-soft);">Aún no se ha iniciado el cargue.</div>
+            ${(esAtrasado(o) && o.Estado!=='Completado') ? `
+              <div style="background:var(--danger-soft);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+                <label style="color:var(--danger);">⚠ Despacho atrasado — razón obligatoria</label>
+                <textarea placeholder="Ej: Transporte reasignado, se despacha mañana." id="razon-${idPedido}"></textarea>
+              </div>
+            ` : ''}
             <label>${esClienteRecoge(o) ? 'Quién recoge (nombre y documento/placa)' : 'Transportador'}</label>
             <input type="text" id="transp-${idPedido}" placeholder="${esClienteRecoge(o) ? 'Ej: Juan Pérez, CC 123456 / placa ABC123' : 'Ej: Coordinadora'}">
             <label>Cantidad despachada</label><input type="number" id="cant-${idPedido}" placeholder="Ej: 2000">
@@ -638,6 +687,14 @@ async function registrarEntrega(idPedido){
   const tipoNovedad = document.getElementById('nov-'+idPedido).value;
   const detalleNovedad = document.getElementById('novTexto-'+idPedido) ? document.getElementById('novTexto-'+idPedido).value : '';
 
+  // Si el pedido está atrasado, la razón es obligatoria antes de poder finalizar
+  const list = pedidosCache[currentCompany]||[];
+  const o = list.find(p=>p.ID_Pedido===idPedido);
+  const requiereRazon = o && esAtrasado(o) && o.Estado!=='Completado';
+  const razonEl = document.getElementById('razon-'+idPedido);
+  const razon = razonEl ? razonEl.value.trim() : '';
+  if(requiereRazon && !razon){ showToast('⚠ Este pedido está atrasado — escribe la razón antes de finalizar.'); return; }
+
   // "Finalizar cargue" captura la hora de fin en este mismo clic
   if(!c.fin){ c.fin = new Date(); }
   const horaInicio = fmtHora(c.inicio);
@@ -647,6 +704,9 @@ async function registrarEntrega(idPedido){
   try{
     const data = await llamarAPI({ accion:'registrarEntrega', idPedido, cantidad, transportador, tipoNovedad, detalleNovedad, horaInicio, horaFin, registradoPor: currentUser.nombre });
     if(data.ok){
+      if(requiereRazon && razon){
+        await llamarAPI({ accion:'registrarRazonAtraso', idPedido, fechaProgramadaOriginal:o.Fecha_Entrega, razon, registradoPor:currentUser.nombre });
+      }
       showToast('✅ Entrega registrada correctamente.');
       delete entregasCache[idPedido];
       delete cargueState[idPedido];
@@ -658,21 +718,6 @@ async function registrarEntrega(idPedido){
 }
 
 
-async function guardarRazon(idPedido){
-  const razon = document.getElementById('razon-'+idPedido).value.trim();
-  if(!razon){ showToast('Escribe una razón antes de guardar.'); return; }
-  const list = pedidosCache[currentCompany]||[];
-  const o = list.find(p=>p.ID_Pedido===idPedido);
-
-  showToast('Guardando razón...');
-  try{
-    const data = await llamarAPI({ accion:'registrarRazonAtraso', idPedido, fechaProgramadaOriginal:o.Fecha_Entrega, razon, registradoPor:currentUser.nombre });
-    if(data.ok){
-      showToast('✅ Razón guardada.');
-      document.getElementById('razon-'+idPedido).value = '';
-    } else { showToast('Error: '+data.error); }
-  } catch(err){ showToast('Error de conexión: '+err.message); }
-}
 
 async function registrarNoProgramado(){
   const payload = {
