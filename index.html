@@ -666,9 +666,10 @@ function renderHistorial(list){
       ${grupos[fecha].map(o=>{
         const esAbierta = String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
         const cantidadTxt = esAbierta ? 'Cantidad abierta' : `${Number(o.Cantidad_Entregada).toLocaleString()} / ${Number(o.Cantidad_Total).toLocaleString()}`;
+        const key = o.ID_Pedido;
         return `
-        <div class="order">
-          <div class="detail-inner" style="padding:14px 18px;grid-template-columns:1fr;">
+        <div class="order" id="order-${key}">
+          <div class="detail-inner" style="padding:14px 18px;grid-template-columns:1fr;cursor:pointer;" onclick="toggleOrder('${key}')">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
               <div>
                 <div class="client">${o.Razon_Social_Cliente}</div>
@@ -679,8 +680,12 @@ function renderHistorial(list){
                 <div class="qty">${cantidadTxt}</div>
                 <span class="status-pill status-Completado">Completado</span>
                 ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
+                <div class="chevron" style="margin-top:4px;">›</div>
               </div>
             </div>
+          </div>
+          <div class="order-detail" id="detail-${key}">
+            <div class="detail-inner"><div class="loading" style="grid-column:1/-1;">Cargando detalle...</div></div>
           </div>
         </div>`;
       }).join('')}
@@ -975,11 +980,22 @@ async function pintarDetalle(idPedido){
 
   const detailEl = document.getElementById('detail-'+idPedido);
   detailEl.innerHTML = `
-    <div class="detail-inner" style="grid-template-columns:1fr;max-width:520px;">
+    <div class="detail-inner" style="grid-template-columns:1fr;max-width:560px;">
       <div>
         ${o.Notas_Planilla ? `<div class="novedad-tag" style="margin-bottom:14px;display:inline-block;">📋 ${o.Notas_Planilla}</div>` : ''}
-        <h4>Registrar nueva entrega</h4>
-        ${canEdit ? `
+
+        <h4>Trazabilidad — quién despachó qué y cuándo</h4>
+        ${entregas.length ? entregas.map(e=>`
+          <div class="entrega-item">
+            <div>
+              <div><strong>${Number(e.Cantidad_Despachada).toLocaleString()} unds</strong> — ${e.Transportador||'sin dato de transportador'}</div>
+              <div class="entrega-date">Registrado por <strong>${e.Registrado_Por||'—'}</strong> · ${e.Fecha_Entrega}${e.Hora_Inicio_Cargue ? ' · '+e.Hora_Inicio_Cargue+(e.Hora_Fin_Cargue ? ' → '+e.Hora_Fin_Cargue : '') : ''}</div>
+              ${e.Tipo_Novedad && e.Tipo_Novedad!=='Sin novedad' ? `<span class="novedad-tag" style="margin-top:4px;display:inline-block;">${e.Tipo_Novedad}${e.Detalle_Novedad ? ': '+e.Detalle_Novedad : ''}</span>` : ''}
+            </div>
+          </div>`).join('') : '<div class="entrega-item">Aún no se registran entregas para este pedido.</div>'}
+
+        <h4 style="margin-top:20px;">Registrar nueva entrega</h4>
+        ${o.Estado==='Completado' ? `<div class="readonly-note">Este pedido ya está completado — no se pueden registrar más entregas.</div>` : canEdit ? `
           <div class="add-entrega">
             <label>Control de tiempo de cargue</label>
             <div style="margin-bottom:12px;" id="cargueBtnWrap-${idPedido}">
