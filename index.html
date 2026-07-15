@@ -593,12 +593,17 @@ function dayCategory(o){
   if(o.Estado === 'Completado'){
     // Para completados, lo que importa es cuándo se completó de verdad, no la fecha original de entrega
     // (así un pedido atrasado que se termina hoy cuenta en "Completados hoy", no en Historial).
-    // Si aún no hay Fecha_Ultima_Entrega (columna faltante o pedido completado antes de este ajuste),
-    // se asume que es de hoy en vez de mandarlo silenciosamente al historial.
     const dCompletado = parseFechaStr(o.Fecha_Ultima_Entrega);
-    if(!dCompletado) return 'hoy';
-    const diffCompletado = Math.round((dCompletado - hoyRef())/86400000);
-    return diffCompletado === 0 ? 'hoy' : 'historial';
+    if(dCompletado){
+      const diffCompletado = Math.round((dCompletado - hoyRef())/86400000);
+      return diffCompletado === 0 ? 'hoy' : 'historial';
+    }
+    // Si no hay Fecha_Ultima_Entrega (pedidos completados antes de tener esa columna), se usa la
+    // fecha original de entrega como respaldo — así no se quedan contando como "de hoy" para siempre.
+    const dOriginal = parseFechaStr(o.Fecha_Entrega);
+    if(!dOriginal) return 'hoy';
+    const diffOriginal = Math.round((dOriginal - hoyRef())/86400000);
+    return diffOriginal === 0 ? 'hoy' : 'historial';
   }
   const d = parseFechaStr(o.Fecha_Entrega);
   if(!d) return 'hoy'; // "Abierta"
