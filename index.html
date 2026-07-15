@@ -839,7 +839,12 @@ function renderAlistamiento(list){
             <div id="faltanteReal-${key}" style="margin-top:8px;"></div>
           </div>
         ` : ''}
-      ` : `<div class="readonly-note">${estado ? estadoLabel[estado] : 'Aún sin revisar'}</div>`}
+      ` : `<div class="readonly-note">
+          ${estado==='Incompleto' && !esAbierta ? `Incompleto — hay <strong>${Number(disponible).toLocaleString()}</strong> de <strong>${total.toLocaleString()}</strong> solicitadas, faltan <strong>${Math.max(0,total-Number(disponible)).toLocaleString()}</strong>` :
+            estado==='Sin_Existencia' ? `Sin existencia — 0 de ${esAbierta?'cantidad abierta':total.toLocaleString()+' unds solicitadas'}` :
+            estado==='Completo' ? `Completo — ${esAbierta?'cantidad abierta':total.toLocaleString()+' unds'}` :
+            'Aún sin revisar'}
+        </div>`}
     </div>`;
   }).join('');
 
