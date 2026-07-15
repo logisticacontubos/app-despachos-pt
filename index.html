@@ -615,6 +615,18 @@ function dayCategory(o){
 
 // ---------- FILTROS Y CONTROLES ----------
 function setStatFilter(f){
+  // Si estabas en Alistamiento o Historial, salir de esos modos primero para que el filtro sí se vea
+  if(alistamientoActivo){
+    alistamientoActivo = false;
+    const btnAlist = document.getElementById('btnAlistamiento');
+    if(btnAlist) btnAlist.classList.remove('active');
+    document.getElementById('floatbarAlistamiento').classList.remove('show');
+  }
+  if(historialActivo){
+    historialActivo = false;
+    const btnHist = document.getElementById('btnHistorial');
+    if(btnHist) btnHist.classList.remove('active');
+  }
   currentFilter = (currentFilter === f) ? 'principal' : f; // clic de nuevo = volver a la vista principal
   document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('tab-active'));
   if(currentFilter !== 'principal'){
