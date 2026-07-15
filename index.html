@@ -900,14 +900,20 @@ function enviarReporteAlistamiento(){
     const reg = alistamientoCache[o.ID_Pedido];
     const estado = reg ? reg.Estado_Alistamiento : null;
     const icono = estado ? iconos[estado] : '➖';
+    const esAbierta = String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
+    const total = Number(o.Cantidad_Total)||0;
+    const totalTxt = esAbierta ? 'cantidad abierta' : `${total.toLocaleString()} unds solicitadas`;
     texto += `${icono} *${o.Razon_Social_Cliente}* — ${o.Referencia} (OC ${o.OC_Cliente})`;
-    if(estado==='Incompleto'){
-      const total = Number(o.Cantidad_Total)||0;
+    if(estado==='Completo'){
+      texto += ` — ${totalTxt} (completo)`;
+    } else if(estado==='Incompleto'){
       const disp = Number(reg.Cantidad_Disponible)||0;
       texto += ` — Hay ${disp.toLocaleString()} de ${total.toLocaleString()}, faltan ${Math.max(0,total-disp).toLocaleString()}`;
+    } else if(estado==='Sin_Existencia'){
+      texto += ` — ${totalTxt}, 0 disponibles (sin existencia)`;
+    } else {
+      texto += ` — ${totalTxt}, sin revisar`;
     }
-    if(estado==='Sin_Existencia') texto += ` — sin existencia`;
-    if(!estado) texto += ` — sin revisar`;
     texto += `\n`;
   });
 
