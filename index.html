@@ -499,9 +499,13 @@ function resetVistaPrincipal(){
 }
 
 // En celular, volver a abrir la app casi nunca recarga la página de verdad — solo la retoma
-// donde estaba. Esto detecta cuando vuelve a quedar visible y la deja en la vista normal otra vez.
+// donde estaba. Esto detecta cuando vuelve a quedar visible y la deja en la vista normal otra vez —
+// PERO nunca si hay un cargue en curso (uno o varios vehículos), para no perder ese progreso
+// cuando se bloquea la pantalla, entra una llamada, o se cambia de app un momento.
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'visible' && currentUser){
+    const hayCargueEnCurso = Object.values(cargueState).some(c=>c && c.inicio) || (cargueBatch && cargueBatch.inicio);
+    if(hayCargueEnCurso) return; // no toca nada — deja el cargue tal como estaba
     resetVistaPrincipal();
     render();
   }
@@ -1038,9 +1042,10 @@ function render(){
         <div><div class="cell-label">Avance</div>${esAbierta
           ? `<span class="status-pill" style="background:#F0E6FB;color:#7A3FBF;">Cantidad abierta</span>`
           : `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div><div class="progress-pct">${pct}% completado</div>`}</div>
-        <div>
+        <div id="estadoCol-${key}">
           <span class="status-pill status-${o.Estado}">${o.Estado}</span>
           ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
+          ${(cargueState[key] && cargueState[key].inicio) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
         </div>
         <div class="chevron">${modoSeleccion ? '' : '›'}</div>
       </div>
@@ -1322,8 +1327,38 @@ function fmtHora(d){
   const ss = String(d.getSeconds()).padStart(2,'0');
   return `${hh}:${mm}:${ss}`;
 }
+// Guarda el cargue en curso también en el dispositivo, para que sobreviva incluso si el navegador
+// llega a recargar la página de verdad (no solo pausarla) mientras varios vehículos están cargando.
+function guardarCargueEnDisco(){
+  try{
+    const plano = {};
+    Object.keys(cargueState).forEach(k=>{
+      if(cargueState[k] && cargueState[k].inicio) plano[k] = cargueState[k].inicio.toISOString();
+    });
+    localStorage.setItem('despachoPT_cargueEnCurso', JSON.stringify(plano));
+  } catch(e){}
+}
+function restaurarCargueDeDisco(){
+  try{
+    const guardado = JSON.parse(localStorage.getItem('despachoPT_cargueEnCurso') || '{}');
+    Object.keys(guardado).forEach(k=>{ cargueState[k] = { inicio: new Date(guardado[k]), fin: null }; });
+  } catch(e){}
+}
+restaurarCargueDeDisco(); // se restaura aquí mismo, justo después de declarar cargueState arriba
+function actualizarBadgeCargando(key){
+  const list = pedidosCache[currentCompany]||[];
+  const o = list.find(p=>p.ID_Pedido===key);
+  const col = document.getElementById('estadoCol-'+key);
+  if(!o || !col) return;
+  col.innerHTML = `
+    <span class="status-pill status-${o.Estado}">${o.Estado}</span>
+    ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
+    ${(cargueState[key] && cargueState[key].inicio) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
+  `;
+}
 function iniciarCargue(key){
   cargueState[key] = { inicio:new Date(), fin:null };
+  guardarCargueEnDisco();
   const wrap = document.getElementById('cargueBtnWrap-'+key);
   if(wrap) wrap.style.display = 'none';
   const timeEl = document.getElementById('cargueTime-'+key);
@@ -1335,6 +1370,7 @@ function iniciarCargue(key){
   timeEl.style.fontWeight = '700';
   timeEl.style.color = 'var(--ok)';
   timeEl.innerHTML = `✅ Cargue iniciado a las ${fmtHora(cargueState[key].inicio)} — en curso...`;
+  actualizarBadgeCargando(key); // se ve el "🚛 Cargando" en la tarjeta sin cerrar este panel
 }
 
 // ---------- ACCIONES REALES CONTRA EL BACKEND ----------
@@ -1396,6 +1432,7 @@ async function registrarEntrega(idPedido){
       showToast('✅ Entrega registrada correctamente.');
       delete entregasCache[idPedido];
       delete cargueState[idPedido];
+      guardarCargueEnDisco();
       actualizarPedidoLocal(idPedido, cantidad); // actualiza al instante, sin esperar otra llamada al backend
       render();
       document.getElementById('order-'+idPedido).classList.add('open');
