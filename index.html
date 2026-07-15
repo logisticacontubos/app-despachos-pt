@@ -290,6 +290,7 @@
         <div id="futuroMenu" style="display:none;position:absolute;right:0;top:40px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px;min-width:190px;z-index:20;"></div>
       </div>
       <button class="upload-btn" id="btnHistorial" onclick="toggleHistorialPanel()">🕘 Historial</button>
+      <button class="upload-btn" id="btnAlistamiento" onclick="toggleAlistamiento()" style="display:none;border-color:var(--ok);color:var(--ok);">📋 Alistamiento</button>
     </div>
   </div>
 
@@ -299,6 +300,11 @@
 <div class="floatbar" id="floatbar">
   <span id="floatCount">0 pedidos seleccionados</span>
   <button onclick="abrirConsolidado()">Despachar seleccionados →</button>
+</div>
+
+<div class="floatbar" id="floatbarAlistamiento" style="background:#075E54;">
+  <span>📋 Alistamiento de hoy</span>
+  <button style="background:#25D366;" onclick="enviarReporteAlistamiento()">📲 Enviar reporte por WhatsApp</button>
 </div>
 
 <div class="overlay" id="overlaySeleccion" onclick="if(event.target===this) cerrarConsolidado()">
@@ -419,6 +425,7 @@ function entrarConUsuario(usuario){
   document.getElementById('btnManualToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
   document.getElementById('btnNoProgramado').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
   document.getElementById('btnModoSeleccion').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
+  document.getElementById('btnAlistamiento').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
 
   setUpCompanyButtons();
 }
@@ -438,6 +445,12 @@ function logout(){
   document.getElementById('overlaySeleccion').classList.remove('show');
   const btnSel = document.getElementById('btnModoSeleccion');
   if(btnSel){ btnSel.classList.remove('active'); btnSel.textContent = '☑ Selección múltiple'; }
+
+  alistamientoActivo = false;
+  alistamientoCache = {};
+  document.getElementById('floatbarAlistamiento').classList.remove('show');
+  const btnAlist = document.getElementById('btnAlistamiento');
+  if(btnAlist) btnAlist.classList.remove('active');
 
   document.getElementById('mainApp').style.display='none';
   document.getElementById('login').style.display='flex';
@@ -467,14 +480,18 @@ function resetVistaPrincipal(){
   currentDayFilter = 'hoy';
   historialActivo = false;
   modoSeleccion = false;
+  alistamientoActivo = false;
   seleccionados.clear();
   document.querySelectorAll('.stat-card').forEach(card=>card.classList.remove('tab-active'));
   const btnHist = document.getElementById('btnHistorial');
   if(btnHist) btnHist.classList.remove('active');
   const btnSel = document.getElementById('btnModoSeleccion');
   if(btnSel){ btnSel.classList.remove('active'); btnSel.textContent = '☑ Selección múltiple'; }
+  const btnAlist = document.getElementById('btnAlistamiento');
+  if(btnAlist) btnAlist.classList.remove('active');
   document.getElementById('futuroMenu').style.display = 'none';
   document.getElementById('floatbar').classList.remove('show');
+  document.getElementById('floatbarAlistamiento').classList.remove('show');
   document.getElementById('overlaySeleccion').classList.remove('show');
   document.getElementById('noProgramadoForm').style.display = 'none';
   document.getElementById('uploadPanel').style.display = 'none';
@@ -507,6 +524,10 @@ async function setCompany(c){
   historialActivo = false;
   const btnHist = document.getElementById('btnHistorial');
   if(btnHist) btnHist.classList.remove('active');
+  alistamientoActivo = false;
+  const btnAlist = document.getElementById('btnAlistamiento');
+  if(btnAlist) btnAlist.classList.remove('active');
+  document.getElementById('floatbarAlistamiento').classList.remove('show');
   document.getElementById('futuroMenu').style.display='none';
   setUpCompanyButtons();
   await cargarPedidos();
@@ -611,6 +632,8 @@ function toggleFuturoMenu(){
   m.style.display = (m.style.display==='none') ? 'block' : 'none';
 }
 let historialActivo = false;
+let alistamientoActivo = false;
+let alistamientoCache = {};
 function toggleHistorialPanel(){
   historialActivo = !historialActivo;
   document.getElementById('btnHistorial').classList.toggle('active', historialActivo);
@@ -724,12 +747,185 @@ function pintarResultadosHistorial(completados){
 }
 
 
+// ---------- ALISTAMIENTO (picking previo al despacho) ----------
+async function toggleAlistamiento(){
+  alistamientoActivo = !alistamientoActivo;
+  const btn = document.getElementById('btnAlistamiento');
+  btn.classList.toggle('active', alistamientoActivo);
+  document.getElementById('floatbarAlistamiento').classList.toggle('show', alistamientoActivo);
+  if(alistamientoActivo){
+    historialActivo = false;
+    const btnHist = document.getElementById('btnHistorial');
+    if(btnHist) btnHist.classList.remove('active');
+    await cargarAlistamiento();
+  }
+  render();
+}
+
+function fechaHoyTexto(){
+  const h = hoyRef();
+  return `${String(h.getDate()).padStart(2,'0')}/${String(h.getMonth()+1).padStart(2,'0')}/${h.getFullYear()}`;
+}
+
+async function cargarAlistamiento(){
+  try{
+    const data = await llamarAPI({ accion:'getAlistamiento', empresa: currentCompany, fecha: fechaHoyTexto() });
+    alistamientoCache = data.ok ? data.alistamiento : {};
+  } catch(err){ alistamientoCache = {}; }
+}
+
+function renderAlistamiento(list){
+  document.getElementById('viewingLabel').innerHTML = `📋 Alistamiento de hoy · ${currentCompany} <a href="#" onclick="toggleAlistamiento();return false;" style="color:var(--ink-soft);text-decoration:underline;margin-left:6px;">volver a despacho</a>`;
+  document.getElementById('futuroCount').textContent = '';
+  document.getElementById('futuroMenu').style.display = 'none';
+
+  // Solo tiene sentido alistar lo que aún no está completado (lo que se va a despachar hoy)
+  const pendientes = list.filter(o=>o.Estado!=='Completado' && dayCategory(o)==='hoy');
+  const container = document.getElementById('orderList');
+
+  if(pendientes.length===0){
+    container.innerHTML = `<div class="empty"><div class="big">📋</div>No hay pedidos por alistar hoy para ${currentCompany}.</div>`;
+    return;
+  }
+
+  const completos = pendientes.filter(o=>alistamientoCache[o.ID_Pedido]?.Estado_Alistamiento==='Completo').length;
+  const incompletos = pendientes.filter(o=>alistamientoCache[o.ID_Pedido]?.Estado_Alistamiento==='Incompleto').length;
+  const sinExistencia = pendientes.filter(o=>alistamientoCache[o.ID_Pedido]?.Estado_Alistamiento==='Sin_Existencia').length;
+  const sinRevisar = pendientes.length - completos - incompletos - sinExistencia;
+
+  const canEdit = currentUser.rol !== 'Consulta';
+
+  container.innerHTML = `
+    <div class="stats" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px;">
+      <div class="stat-card"><div class="label">Completos</div><div class="value" style="color:var(--ok);">${completos}</div></div>
+      <div class="stat-card"><div class="label">Incompletos</div><div class="value" style="color:var(--warn);">${incompletos}</div></div>
+      <div class="stat-card"><div class="label">Sin existencia</div><div class="value" style="color:var(--danger);">${sinExistencia}</div></div>
+      <div class="stat-card"><div class="label">Sin revisar</div><div class="value" style="color:var(--ink-soft);">${sinRevisar}</div></div>
+    </div>
+    <div id="listaAlistamiento"></div>
+  `;
+
+  const listaEl = document.getElementById('listaAlistamiento');
+  listaEl.innerHTML = pendientes.map(o=>{
+    const key = o.ID_Pedido;
+    const reg = alistamientoCache[key];
+    const estado = reg ? reg.Estado_Alistamiento : null;
+    const disponible = reg ? reg.Cantidad_Disponible : '';
+    const total = Number(o.Cantidad_Total)||0;
+    const esAbierta = String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
+    const estadoLabel = { Completo:'Completo', Incompleto:'Incompleto', Sin_Existencia:'Sin existencia' };
+    const estadoClase = estado==='Completo' ? 'status-Completado' : estado==='Incompleto' ? 'status-flag-atrasado' : estado==='Sin_Existencia' ? 'status-Atrasado' : '';
+    return `
+    <div class="order" style="padding:16px 18px;margin-bottom:10px;" id="alist-${key}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px;">
+        <div>
+          <div class="client">${o.Razon_Social_Cliente}</div>
+          <div class="ref">${o.Referencia}</div>
+          <div class="oc">OC ${o.OC_Cliente} · ${esAbierta ? 'Cantidad abierta' : total.toLocaleString()+' unds solicitadas'}</div>
+        </div>
+        <span class="status-pill ${estadoClase}" style="${!estado ? 'background:#ECEAE5;color:var(--ink-soft);' : ''}">${estado ? estadoLabel[estado] : 'Sin revisar'}</span>
+      </div>
+      ${canEdit ? `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button onclick="marcarAlistamiento('${key}','Completo')" style="flex:1;min-width:100px;border:1.5px solid var(--line);background:${estado==='Completo'?'var(--ok)':'white'};color:${estado==='Completo'?'white':'var(--ink-soft)'};border-color:${estado==='Completo'?'var(--ok)':'var(--line)'};padding:9px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✅ Completo</button>
+          <button onclick="marcarAlistamiento('${key}','Incompleto')" style="flex:1;min-width:100px;border:1.5px solid var(--line);background:${estado==='Incompleto'?'var(--warn)':'white'};color:${estado==='Incompleto'?'white':'var(--ink-soft)'};border-color:${estado==='Incompleto'?'var(--warn)':'var(--line)'};padding:9px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">⚠️ Incompleto</button>
+          <button onclick="marcarAlistamiento('${key}','Sin_Existencia')" style="flex:1;min-width:100px;border:1.5px solid var(--line);background:${estado==='Sin_Existencia'?'var(--danger)':'white'};color:${estado==='Sin_Existencia'?'white':'var(--ink-soft)'};border-color:${estado==='Sin_Existencia'?'var(--danger)':'var(--line)'};padding:9px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">❌ No hay ninguna</button>
+        </div>
+        ${estado==='Incompleto' && !esAbierta ? `
+          <div style="margin-top:10px;">
+            <label style="display:block;font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:5px;">Pedido solicita: <strong>${total.toLocaleString()} unds</strong> — ¿cuántas hay disponibles?</label>
+            <input type="number" id="disp-${key}" value="${disponible}" placeholder="Ej: 300" oninput="actualizarDisponibleReal('${key}', ${total})" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit;">
+            <div id="faltanteReal-${key}" style="margin-top:8px;"></div>
+          </div>
+        ` : ''}
+      ` : `<div class="readonly-note">${estado ? estadoLabel[estado] : 'Aún sin revisar'}</div>`}
+    </div>`;
+  }).join('');
+
+  // Pinta el faltante inicial para los que ya tenían disponible guardado
+  pendientes.forEach(o=>{
+    const reg = alistamientoCache[o.ID_Pedido];
+    if(reg && reg.Estado_Alistamiento==='Incompleto' && reg.Cantidad_Disponible!==''){
+      pintarFaltanteReal(o.ID_Pedido, Number(o.Cantidad_Total)||0, Number(reg.Cantidad_Disponible));
+    }
+  });
+}
+
+async function marcarAlistamiento(idPedido, estado){
+  const list = pedidosCache[currentCompany]||[];
+  const o = list.find(p=>p.ID_Pedido===idPedido);
+  if(!o) return;
+  const total = Number(o.Cantidad_Total)||0;
+  const reg = alistamientoCache[idPedido];
+  const disponible = (estado==='Incompleto' && reg) ? reg.Cantidad_Disponible : (estado==='Sin_Existencia' ? 0 : (estado==='Completo' ? total : ''));
+  const faltante = estado==='Sin_Existencia' ? total : (estado==='Completo' ? 0 : '');
+
+  const payload = { accion:'registrarAlistamiento', idPedido, empresa: currentCompany, fecha: fechaHoyTexto(), estado, cantidadDisponible: disponible, cantidadFaltante: faltante, registradoPor: currentUser.nombre };
+  alistamientoCache[idPedido] = { Estado_Alistamiento: estado, Cantidad_Disponible: disponible, Cantidad_Faltante: faltante };
+  renderAlistamiento(list); // refleja al instante
+  try{ await llamarAPI(payload); } catch(err){ showToast('Error guardando: '+err.message); }
+}
+
+function pintarFaltanteReal(idPedido, total, disponible){
+  const el = document.getElementById('faltanteReal-'+idPedido);
+  if(!el) return;
+  if(disponible==='' || isNaN(disponible)){ el.innerHTML=''; return; }
+  const faltan = Math.max(0, total - disponible);
+  el.innerHTML = `<div style="font-size:12.5px;font-weight:700;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:8px 10px;">Faltan <strong>${faltan.toLocaleString()}</strong> unds</div>`;
+}
+
+let _alistTimer;
+function actualizarDisponibleReal(idPedido, total){
+  const val = document.getElementById('disp-'+idPedido).value;
+  pintarFaltanteReal(idPedido, total, Number(val));
+  clearTimeout(_alistTimer);
+  _alistTimer = setTimeout(async ()=>{
+    const disponible = Number(val)||0;
+    const faltante = Math.max(0, total - disponible);
+    alistamientoCache[idPedido] = { Estado_Alistamiento:'Incompleto', Cantidad_Disponible: disponible, Cantidad_Faltante: faltante };
+    try{
+      await llamarAPI({ accion:'registrarAlistamiento', idPedido, empresa: currentCompany, fecha: fechaHoyTexto(), estado:'Incompleto', cantidadDisponible: disponible, cantidadFaltante: faltante, registradoPor: currentUser.nombre });
+    } catch(err){ showToast('Error guardando: '+err.message); }
+  }, 500); // espera a que termine de escribir antes de guardar
+}
+
+function enviarReporteAlistamiento(){
+  const list = pedidosCache[currentCompany]||[];
+  const pendientes = list.filter(o=>o.Estado!=='Completado' && dayCategory(o)==='hoy');
+  const fecha = fechaHoyTexto();
+  const iconos = { Completo:'✅', Incompleto:'⚠️', Sin_Existencia:'❌' };
+
+  let texto = `*Reporte de Alistamiento — ${currentCompany}*\n📅 ${fecha}\n👤 Enviado por: ${currentUser.nombre}\n\n`;
+  pendientes.forEach(o=>{
+    const reg = alistamientoCache[o.ID_Pedido];
+    const estado = reg ? reg.Estado_Alistamiento : null;
+    const icono = estado ? iconos[estado] : '➖';
+    texto += `${icono} *${o.Razon_Social_Cliente}* — ${o.Referencia} (OC ${o.OC_Cliente})`;
+    if(estado==='Incompleto'){
+      const total = Number(o.Cantidad_Total)||0;
+      const disp = Number(reg.Cantidad_Disponible)||0;
+      texto += ` — Hay ${disp.toLocaleString()} de ${total.toLocaleString()}, faltan ${Math.max(0,total-disp).toLocaleString()}`;
+    }
+    if(estado==='Sin_Existencia') texto += ` — sin existencia`;
+    if(!estado) texto += ` — sin revisar`;
+    texto += `\n`;
+  });
+
+  const url = 'https://wa.me/?text=' + encodeURIComponent(texto);
+  window.open(url, '_blank');
+}
+
+
 function render(){
   const list = pedidosCache[currentCompany] || [];
   const noProgList = noProgramadosCache[currentCompany] || [];
 
   if(historialActivo){
     renderHistorial(list);
+    return;
+  }
+  if(alistamientoActivo){
+    renderAlistamiento(list);
     return;
   }
 
