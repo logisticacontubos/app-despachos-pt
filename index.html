@@ -425,7 +425,7 @@ function entrarConUsuario(usuario){
   document.getElementById('btnManualToggle').style.display = (currentUser.rol==='Jefe de Logística') ? 'inline-flex' : 'none';
   document.getElementById('btnNoProgramado').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
   document.getElementById('btnModoSeleccion').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
-  document.getElementById('btnAlistamiento').style.display = (currentUser.rol==='Consulta') ? 'none' : 'inline-flex';
+  document.getElementById('btnAlistamiento').style.display = 'inline-flex'; // visible para todos, incluida Consulta (solo lectura)
 
   setUpCompanyButtons();
 }
@@ -752,7 +752,8 @@ async function toggleAlistamiento(){
   alistamientoActivo = !alistamientoActivo;
   const btn = document.getElementById('btnAlistamiento');
   btn.classList.toggle('active', alistamientoActivo);
-  document.getElementById('floatbarAlistamiento').classList.toggle('show', alistamientoActivo);
+  const puedeEnviar = currentUser.rol !== 'Consulta';
+  document.getElementById('floatbarAlistamiento').classList.toggle('show', alistamientoActivo && puedeEnviar);
   if(alistamientoActivo){
     historialActivo = false;
     const btnHist = document.getElementById('btnHistorial');
