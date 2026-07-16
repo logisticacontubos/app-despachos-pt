@@ -285,6 +285,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
     <div id="viewingLabel" style="font-size:12.5px;color:var(--ink-soft);font-weight:600;"></div>
     <div style="display:flex;gap:6px;">
+      <button class="upload-btn" onclick="irAInicio()" style="border-color:var(--magenta);color:var(--magenta);">🏠 Inicio</button>
       <div style="position:relative;">
         <button class="upload-btn" onclick="toggleFuturoMenu()">📅 Próximos días <span id="futuroCount" style="color:var(--magenta);font-weight:700;"></span></button>
         <div id="futuroMenu" style="display:none;position:absolute;right:0;top:40px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px;min-width:190px;z-index:20;"></div>
@@ -496,6 +497,10 @@ function resetVistaPrincipal(){
   document.getElementById('noProgramadoForm').style.display = 'none';
   document.getElementById('uploadPanel').style.display = 'none';
   document.getElementById('manualPanel').style.display = 'none';
+}
+function irAInicio(){
+  resetVistaPrincipal();
+  render();
 }
 
 // En celular, volver a abrir la app casi nunca recarga la página de verdad — solo la retoma
