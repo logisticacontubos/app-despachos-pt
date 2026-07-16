@@ -90,7 +90,7 @@
   .chevron{color:var(--ink-soft);font-size:14px;transition:.2s;}
   .order.open .chevron{transform:rotate(90deg);}
   .order-detail{max-height:0;overflow:hidden;transition:max-height .25s ease;border-top:1px solid var(--line);}
-  .order.open .order-detail{max-height:700px;}
+  .order.open .order-detail{max-height:5000px;}
   .detail-inner{padding:18px 20px 22px;display:grid;grid-template-columns:1.2fr 1fr;gap:24px;}
   .detail-inner h4{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);margin:0 0 10px;}
   .entrega-item{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px dashed var(--line);font-size:12.5px;}
@@ -1063,7 +1063,7 @@ function render(){
         <div id="estadoCol-${key}">
           <span class="status-pill status-${o.Estado}">${o.Estado}</span>
           ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
-          ${(cargueState[key] && cargueState[key].inicio) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
+          ${estaCargando(o) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
         </div>
         <div class="chevron">${modoSeleccion ? '' : '›'}</div>
       </div>
@@ -1248,6 +1248,15 @@ async function pintarDetalle(idPedido){
   const pendiente = esAbierta ? null : Math.max(0, (Number(o.Cantidad_Total)||0) - (Number(o.Cantidad_Entregada)||0));
   const pendienteTexto = esAbierta ? '' : pendiente.toLocaleString()+' unds';
 
+  // Si el Sheet dice que hay un cargue en curso (lo inició otro dispositivo/usuario) y este dispositivo
+  // todavía no lo tiene localmente, se adopta aquí — así se puede ver y finalizar desde cualquier lado.
+  if(!cargueState[idPedido] && o.Cargue_Inicio){
+    const partes = o.Cargue_Inicio.split(':').map(Number);
+    const fecha = new Date();
+    fecha.setHours(partes[0]||0, partes[1]||0, partes[2]||0, 0);
+    cargueState[idPedido] = { inicio: fecha, fin: null };
+  }
+
   if(!entregasCache[idPedido]){
     try{
       const data = await llamarAPI({ accion:'getEntregas', idPedido });
@@ -1304,7 +1313,7 @@ async function pintarDetalle(idPedido){
             <div style="margin-bottom:12px;display:${(cargueState[idPedido] && cargueState[idPedido].inicio) ? 'none' : 'block'};" id="cargueBtnWrap-${idPedido}">
               <button type="button" id="btnIniciar-${idPedido}" onclick="iniciarCargue('${idPedido}')" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>
             </div>
-            <div id="cargueTime-${idPedido}" style="margin-bottom:12px;${(cargueState[idPedido] && cargueState[idPedido].inicio) ? 'background:var(--ok-soft);border:1px solid var(--ok);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;color:var(--ok);' : 'font-size:11.5px;color:var(--ink-soft);'}">${(cargueState[idPedido] && cargueState[idPedido].inicio) ? `✅ Cargue iniciado a las ${fmtHora(cargueState[idPedido].inicio)} — en curso...` : 'Aún no se ha iniciado el cargue.'}</div>
+            <div id="cargueTime-${idPedido}" style="margin-bottom:12px;${(cargueState[idPedido] && cargueState[idPedido].inicio) ? 'background:var(--ok-soft);border:1px solid var(--ok);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;color:var(--ok);' : 'font-size:11.5px;color:var(--ink-soft);'}">${(cargueState[idPedido] && cargueState[idPedido].inicio) ? `✅ Cargue iniciado a las ${fmtHora(cargueState[idPedido].inicio)}${o.Cargue_Iniciado_Por ? ' por '+o.Cargue_Iniciado_Por : ''} — en curso...` : 'Aún no se ha iniciado el cargue.'}</div>
             ${(esAtrasado(o) && o.Estado!=='Completado') ? `
               <div style="background:var(--danger-soft);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
                 <label style="color:var(--danger);">⚠ Despacho atrasado — razón obligatoria</label>
@@ -1444,6 +1453,11 @@ function guardarTransportadorEnCurso(idPedido, valor){
   guardarCargueEnDisco();
 }
 restaurarCargueDeDisco(); // se restaura aquí mismo, justo después de declarar cargueState arriba
+// Un pedido se ve "cargando" si el Sheet dice que hay un cargue en curso (Cargue_Inicio lleno,
+// visible para cualquier dispositivo/usuario) o si este mismo dispositivo lo inició hace un momento.
+function estaCargando(o){
+  return !!(o && o.Cargue_Inicio) || !!(cargueState[o && o.ID_Pedido] && cargueState[o.ID_Pedido].inicio);
+}
 function actualizarBadgeCargando(key){
   const list = pedidosCache[currentCompany]||[];
   const o = list.find(p=>p.ID_Pedido===key);
@@ -1452,10 +1466,10 @@ function actualizarBadgeCargando(key){
   col.innerHTML = `
     <span class="status-pill status-${o.Estado}">${o.Estado}</span>
     ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
-    ${(cargueState[key] && cargueState[key].inicio) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
+    ${estaCargando(o) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
   `;
 }
-function iniciarCargue(key){
+async function iniciarCargue(key){
   cargueState[key] = { inicio:new Date(), fin:null };
   guardarCargueEnDisco();
   const wrap = document.getElementById('cargueBtnWrap-'+key);
@@ -1470,6 +1484,14 @@ function iniciarCargue(key){
   timeEl.style.color = 'var(--ok)';
   timeEl.innerHTML = `✅ Cargue iniciado a las ${fmtHora(cargueState[key].inicio)} — en curso...`;
   actualizarBadgeCargando(key); // se ve el "🚛 Cargando" en la tarjeta sin cerrar este panel
+
+  // Avisa al backend para que se vea "cargando" también desde cualquier otro dispositivo/usuario
+  const list = pedidosCache[currentCompany]||[];
+  const o = list.find(p=>p.ID_Pedido===key);
+  if(o){ o.Cargue_Inicio = fmtHora(cargueState[key].inicio); o.Cargue_Iniciado_Por = currentUser.nombre; }
+  try{
+    await llamarAPI({ accion:'iniciarCargueRemoto', idPedido:key, horaInicio: fmtHora(cargueState[key].inicio), iniciadoPor: currentUser.nombre });
+  } catch(err){ /* si falla el aviso remoto, el cargue local sigue funcionando igual */ }
 }
 
 // ---------- ACCIONES REALES CONTRA EL BACKEND ----------
