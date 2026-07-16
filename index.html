@@ -1335,7 +1335,7 @@ async function pintarDetalle(idPedido){
               <option value="Pendiente entrada en sistema">Pendiente entrada en sistema</option>
             </select>
             <div id="novDetalle-${idPedido}" style="display:none;"><label>Describe qué sucedió</label><textarea id="novTexto-${idPedido}" rows="2"></textarea></div>
-            <button onclick="registrarEntrega('${idPedido}')" style="background:var(--danger);">⏹ Finalizar cargue y registrar entrega</button>
+            <button id="btnFinalizar-${idPedido}" onclick="registrarEntrega('${idPedido}')" style="background:var(--danger);">⏹ Finalizar cargue y registrar entrega</button>
           </div>` : `<div class="readonly-note">Tu rol es de consulta — puedes ver el estado del pedido pero no registrar entregas.</div>`}
       </div>
     </div>`;
@@ -1388,7 +1388,17 @@ async function eliminarPedido(idPedido){
 }
 
 function toggleNovedadDetalle(sel, key){
-  document.getElementById('novDetalle-'+key).style.display = (sel.value==='Sin novedad') ? 'none' : 'block';
+  const mostrar = sel.value !== 'Sin novedad';
+  document.getElementById('novDetalle-'+key).style.display = mostrar ? 'block' : 'none';
+  if(mostrar) desplazarHastaFinalizar(key);
+}
+// Cuando aparece la casilla de novedad (o cuando se detecta una diferencia de cantidad), el teclado
+// del celular puede tapar el botón de finalizar — esto desplaza la pantalla para que quede a la vista.
+function desplazarHastaFinalizar(key){
+  setTimeout(()=>{
+    const btn = document.getElementById('btnFinalizar-'+key);
+    if(btn) btn.scrollIntoView({ behavior:'smooth', block:'center' });
+  }, 150); // pequeña espera para que el teclado/layout ya se haya acomodado
 }
 
 // Compara lo que se está por despachar contra lo que falta del pedido (pendiente = null para cantidad abierta,
@@ -1414,6 +1424,7 @@ function verificarCantidad(idPedido, pendiente){
   } else {
     alertaEl.style.display = 'none';
   }
+  desplazarHastaFinalizar(idPedido);
 }
 
 // ---------- CARGUE (inicio/fin) ----------
