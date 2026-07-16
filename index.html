@@ -549,11 +549,29 @@ async function cargarPedidos(){
       pedidosCache[currentCompany] = dataPedidos.pedidos;
       noProgramadosCache[currentCompany] = dataNoProg.ok ? dataNoProg.noProgramados : [];
       render();
+      await reabrirCarguesEnCurso();
     } else {
       document.getElementById('orderList').innerHTML = '<div class="empty">Error cargando pedidos: '+(dataPedidos.error||'')+'</div>';
     }
   } catch(err){
     document.getElementById('orderList').innerHTML = '<div class="empty">Error de conexión: '+err.message+'</div>';
+  }
+}
+
+// Si el navegador recargó la página de verdad (por bloqueo de pantalla, llamada, poca memoria, etc.)
+// mientras había un cargue en curso, esto vuelve a abrir esa tarjeta automáticamente al recargar los
+// pedidos — para que no parezca que "no pasó nada", sino que retoma justo donde ibas.
+async function reabrirCarguesEnCurso(){
+  const list = pedidosCache[currentCompany] || [];
+  const idsConCargue = Object.keys(cargueState).filter(k => cargueState[k] && cargueState[k].inicio);
+  for(const key of idsConCargue){
+    const o = list.find(p=>p.ID_Pedido===key);
+    if(!o) continue; // ese pedido no es de esta empresa/vista actual
+    const el = document.getElementById('order-'+key);
+    if(el && !el.classList.contains('open')){
+      el.classList.add('open');
+      await pintarDetalle(key);
+    }
   }
 }
 
@@ -1258,10 +1276,10 @@ async function pintarDetalle(idPedido){
         ${o.Estado==='Completado' ? `<div class="readonly-note">Este pedido ya está completado — no se pueden registrar más entregas.</div>` : canEdit ? `
           <div class="add-entrega">
             <label>Control de tiempo de cargue</label>
-            <div style="margin-bottom:12px;" id="cargueBtnWrap-${idPedido}">
+            <div style="margin-bottom:12px;display:${(cargueState[idPedido] && cargueState[idPedido].inicio) ? 'none' : 'block'};" id="cargueBtnWrap-${idPedido}">
               <button type="button" id="btnIniciar-${idPedido}" onclick="iniciarCargue('${idPedido}')" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>
             </div>
-            <div id="cargueTime-${idPedido}" style="margin-bottom:12px;font-size:11.5px;color:var(--ink-soft);">Aún no se ha iniciado el cargue.</div>
+            <div id="cargueTime-${idPedido}" style="margin-bottom:12px;${(cargueState[idPedido] && cargueState[idPedido].inicio) ? 'background:var(--ok-soft);border:1px solid var(--ok);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;color:var(--ok);' : 'font-size:11.5px;color:var(--ink-soft);'}">${(cargueState[idPedido] && cargueState[idPedido].inicio) ? `✅ Cargue iniciado a las ${fmtHora(cargueState[idPedido].inicio)} — en curso...` : 'Aún no se ha iniciado el cargue.'}</div>
             ${(esAtrasado(o) && o.Estado!=='Completado') ? `
               <div style="background:var(--danger-soft);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
                 <label style="color:var(--danger);">⚠ Despacho atrasado — razón obligatoria</label>
@@ -1269,7 +1287,7 @@ async function pintarDetalle(idPedido){
               </div>
             ` : ''}
             <label>${esClienteRecoge(o) ? 'Quién recoge (nombre y documento/placa)' : 'Transportador'}</label>
-            <input type="text" id="transp-${idPedido}" placeholder="${esClienteRecoge(o) ? 'Ej: Juan Pérez, CC 123456 / placa ABC123' : 'Ej: Coordinadora'}">
+            <input type="text" id="transp-${idPedido}" value="${(cargueState[idPedido] && cargueState[idPedido].transportador) || ''}" oninput="guardarTransportadorEnCurso('${idPedido}', this.value)" placeholder="${esClienteRecoge(o) ? 'Ej: Juan Pérez, CC 123456 / placa ABC123' : 'Ej: Coordinadora'}">
             <label>Cantidad despachada${(!esAbierta) ? ` <span style="font-weight:400;color:var(--ink-soft);">(pendiente: ${pendienteTexto})</span>` : ''}</label>
             <input type="number" id="cant-${idPedido}" placeholder="Ej: 2000" oninput="verificarCantidad('${idPedido}', ${esAbierta ? 'null' : pendiente})">
             <div id="alertaCantidad-${idPedido}" style="display:none;background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:11.5px;font-weight:600;margin-bottom:10px;"></div>
@@ -1333,7 +1351,9 @@ function guardarCargueEnDisco(){
   try{
     const plano = {};
     Object.keys(cargueState).forEach(k=>{
-      if(cargueState[k] && cargueState[k].inicio) plano[k] = cargueState[k].inicio.toISOString();
+      if(cargueState[k] && cargueState[k].inicio){
+        plano[k] = { inicio: cargueState[k].inicio.toISOString(), transportador: cargueState[k].transportador || '' };
+      }
     });
     localStorage.setItem('despachoPT_cargueEnCurso', JSON.stringify(plano));
   } catch(e){}
@@ -1341,8 +1361,16 @@ function guardarCargueEnDisco(){
 function restaurarCargueDeDisco(){
   try{
     const guardado = JSON.parse(localStorage.getItem('despachoPT_cargueEnCurso') || '{}');
-    Object.keys(guardado).forEach(k=>{ cargueState[k] = { inicio: new Date(guardado[k]), fin: null }; });
+    Object.keys(guardado).forEach(k=>{
+      const g = guardado[k];
+      cargueState[k] = { inicio: new Date(g.inicio || g), fin: null, transportador: g.transportador || '' };
+    });
   } catch(e){}
+}
+function guardarTransportadorEnCurso(idPedido, valor){
+  if(!cargueState[idPedido]) return;
+  cargueState[idPedido].transportador = valor;
+  guardarCargueEnDisco();
 }
 restaurarCargueDeDisco(); // se restaura aquí mismo, justo después de declarar cargueState arriba
 function actualizarBadgeCargando(key){
