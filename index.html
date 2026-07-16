@@ -203,7 +203,7 @@
     <div class="stat-card comp" id="tab-completado" onclick="setStatFilter('completado')"><div class="label">Completados hoy</div><div class="value" id="stat-comp">0</div></div>
     <div class="stat-card noprog" id="tab-noprogramado" onclick="setStatFilter('noprogramado')"><div class="label">No programados</div><div class="value" id="stat-noprog">0</div></div>
   </div>
-  <div id="tabHint" style="font-size:11.5px;color:var(--ink-soft);margin:-14px 0 18px;">Mostrando: pendientes sin despacho + atrasados. Haz clic en un recuadro de arriba para ver esa categoría por separado (clic de nuevo para volver aquí).</div>
+  <div id="tabHint" style="font-size:11.5px;color:var(--ink-soft);margin:-14px 0 18px;">Mostrando: todo lo que necesita acción hoy (pendientes, parciales y atrasados). Haz clic en un recuadro de arriba para ver esa categoría por separado (clic de nuevo para volver aquí).</div>
 
   <div class="toolbar">
     <div></div>
@@ -662,7 +662,7 @@ function setStatFilter(f){
   const hint = document.getElementById('tabHint');
   const nombres = { pendiente:'Pendientes hoy', atrasado:'Atrasados', parcial:'Parciales en curso', completado:'Completados hoy', noprogramado:'No programados' };
   hint.textContent = currentFilter==='principal'
-    ? 'Mostrando: pendientes sin despacho + atrasados. Haz clic en un recuadro de arriba para ver esa categoría por separado (clic de nuevo para volver aquí).'
+    ? 'Mostrando: todo lo que necesita acción hoy (pendientes, parciales y atrasados). Haz clic en un recuadro de arriba para ver esa categoría por separado (clic de nuevo para volver aquí).'
     : `Mostrando solo: ${nombres[currentFilter]}. Haz clic de nuevo en el recuadro para volver a la vista principal.`;
   render();
 }
@@ -1034,7 +1034,7 @@ function render(){
   }
 
   const byStatus = currentFilter==='principal'
-    ? list.filter(o=>(esAtrasado(o) && o.Estado!=='Completado') || (o.Estado==='Pendiente' && Number(o.Cantidad_Entregada)===0))
+    ? list.filter(o=>o.Estado!=='Completado' && dayCategory(o)==='hoy')
     : currentFilter==='pendiente' ? list.filter(o=>o.Estado==='Pendiente' && Number(o.Cantidad_Entregada)===0 && !esAtrasado(o))
     : currentFilter==='atrasado' ? list.filter(o=>esAtrasado(o) && o.Estado!=='Completado')
     : currentFilter==='parcial' ? list.filter(o=>o.Estado==='Parcial' && !esAtrasado(o))
@@ -1064,7 +1064,7 @@ function render(){
         <div><div class="cell-label">Cantidad</div><div class="qty">${esAbierta ? 'Abierta' : entregado.toLocaleString()+' <span class="of">/ '+total.toLocaleString()+'</span>'}</div></div>
         <div><div class="cell-label">Avance</div>${esAbierta
           ? `<span class="status-pill" style="background:#F0E6FB;color:#7A3FBF;">Cantidad abierta</span>`
-          : `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div><div class="progress-pct">${pct}% completado</div>`}</div>
+          : `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div><div class="progress-pct">${pct}% completado${total>0 ? ' · Pendiente: '+(total-entregado).toLocaleString()+' unds' : ''}</div>`}</div>
         <div id="estadoCol-${key}">
           <span class="status-pill status-${o.Estado}">${o.Estado}</span>
           ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
