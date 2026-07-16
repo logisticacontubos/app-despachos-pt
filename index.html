@@ -86,6 +86,7 @@
   .status-Parcial{background:#E7F0FB;color:#1B6FBF;}
   .status-Completado{background:var(--ok-soft);color:var(--ok);}
   .status-Atrasado{background:var(--danger-soft);color:var(--danger);}
+  .status-Cerrado{background:#ECEAE5;color:var(--ink-soft);}
   .status-flag-atrasado{background:#FFB020;color:#5A3A00;border:1px solid #E09000;font-weight:800;}
   .chevron{color:var(--ink-soft);font-size:14px;transition:.2s;}
   .order.open .chevron{transform:rotate(90deg);}
@@ -604,6 +605,7 @@ function dayTabLabel(f){
 // sin importar si la columna Estado en el Sheet todavía dice "Pendiente" o "Parcial"
 // (nada la cambia sola con el tiempo; esta detección es la que corrige eso).
 function esAtrasado(o){
+  if(o.Estado === 'Cerrado') return false; // cerrado manualmente, ya no cuenta como pendiente/atrasado
   if(o.Estado === 'Atrasado') return true;
   const d = parseFechaStr(o.Fecha_Entrega);
   if(!d) return false; // "Abierta" (sin fecha) no cuenta como atrasado automáticamente
@@ -617,6 +619,14 @@ function esClienteRecoge(o){
   return /cliente\s*recoge/i.test(o.Notas_Planilla || '');
 }
 function dayCategory(o){
+  if(o.Estado === 'Cerrado'){
+    const dCierre = parseFechaStr(o.Fecha_Cierre);
+    if(dCierre){
+      const diffCierre = Math.round((dCierre - hoyRef())/86400000);
+      return diffCierre === 0 ? 'hoy' : 'historial';
+    }
+    return 'historial';
+  }
   if(o.Estado === 'Completado'){
     // Para completados, lo que importa es cuándo se completó de verdad, no la fecha original de entrega
     // (así un pedido atrasado que se termina hoy cuenta en "Completados hoy", no en Historial).
@@ -706,7 +716,7 @@ function renderHistorial(list){
   document.getElementById('futuroCount').textContent = '';
   document.getElementById('futuroMenu').style.display = 'none';
 
-  historialCompletadosCache = list.filter(o=>o.Estado==='Completado');
+  historialCompletadosCache = list.filter(o=>o.Estado==='Completado' || o.Estado==='Cerrado');
   const container = document.getElementById('orderList');
 
   if(historialCompletadosCache.length===0){
@@ -775,11 +785,12 @@ function pintarResultadosHistorial(completados){
               </div>
               <div style="text-align:right;">
                 <div class="qty">${cantidadTxt}</div>
-                <span class="status-pill status-Completado">Completado</span>
+                <span class="status-pill status-${o.Estado}">${o.Estado==='Cerrado' ? '🔒 Cerrado' : 'Completado'}</span>
                 ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
                 <div class="chevron" style="margin-top:4px;">›</div>
               </div>
             </div>
+            ${o.Estado==='Cerrado' && o.Razon_Cierre ? `<div class="readonly-note" style="margin-top:10px;">Cerrado por <strong>${o.Cerrado_Por||'—'}</strong> el ${o.Fecha_Cierre||'—'}: ${o.Razon_Cierre}</div>` : ''}
           </div>
           <div class="order-detail" id="detail-${key}">
             <div class="detail-inner"><div class="loading" style="grid-column:1/-1;">Cargando detalle...</div></div>
@@ -825,7 +836,7 @@ function renderAlistamiento(list){
   document.getElementById('futuroMenu').style.display = 'none';
 
   // Solo tiene sentido alistar lo que aún no está completado (lo que se va a despachar hoy)
-  const pendientes = list.filter(o=>o.Estado!=='Completado' && dayCategory(o)==='hoy');
+  const pendientes = list.filter(o=>o.Estado!=='Completado' && o.Estado!=='Cerrado' && dayCategory(o)==='hoy');
   const container = document.getElementById('orderList');
 
   if(pendientes.length===0){
@@ -941,7 +952,7 @@ function actualizarDisponibleReal(idPedido, total){
 
 function enviarReporteAlistamiento(){
   const list = pedidosCache[currentCompany]||[];
-  const pendientes = list.filter(o=>o.Estado!=='Completado' && dayCategory(o)==='hoy');
+  const pendientes = list.filter(o=>o.Estado!=='Completado' && o.Estado!=='Cerrado' && dayCategory(o)==='hoy');
   const fecha = fechaHoyTexto();
   const iconos = { Completo:'✅', Incompleto:'⚠️', Sin_Existencia:'❌' };
 
@@ -1034,7 +1045,7 @@ function render(){
   }
 
   const byStatus = currentFilter==='principal'
-    ? list.filter(o=>o.Estado!=='Completado' && dayCategory(o)==='hoy')
+    ? list.filter(o=>o.Estado!=='Completado' && o.Estado!=='Cerrado' && dayCategory(o)==='hoy')
     : currentFilter==='pendiente' ? list.filter(o=>o.Estado==='Pendiente' && Number(o.Cantidad_Entregada)===0 && !esAtrasado(o))
     : currentFilter==='atrasado' ? list.filter(o=>esAtrasado(o) && o.Estado!=='Completado')
     : currentFilter==='parcial' ? list.filter(o=>o.Estado==='Parcial' && !esAtrasado(o))
@@ -1066,7 +1077,7 @@ function render(){
           ? `<span class="status-pill" style="background:#F0E6FB;color:#7A3FBF;">Cantidad abierta</span>`
           : `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div><div class="progress-pct">${pct}% completado${total>0 ? ' · Pendiente: '+(total-entregado).toLocaleString()+' unds' : ''}</div>`}</div>
         <div id="estadoCol-${key}">
-          <span class="status-pill status-${o.Estado}">${o.Estado}</span>
+          <span class="status-pill status-${o.Estado}">${o.Estado==="Cerrado"?"🔒 Cerrado":o.Estado}</span>
           ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
           ${estaCargando(o) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
         </div>
@@ -1278,9 +1289,16 @@ async function pintarDetalle(idPedido){
         ${o.Notas_Planilla ? `<div class="novedad-tag" style="margin-bottom:14px;display:inline-block;">📋 ${o.Notas_Planilla}</div>` : ''}
 
         ${esJefe ? `
-          <div style="display:flex;gap:8px;margin-bottom:14px;">
-            <button type="button" onclick="toggleEditarPedido('${idPedido}')" style="flex:1;border:1px solid var(--line);background:white;color:var(--ink);padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✏️ Editar pedido</button>
-            <button type="button" onclick="eliminarPedido('${idPedido}')" style="flex:1;border:1px solid var(--danger);background:white;color:var(--danger);padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">🗑️ Eliminar pedido</button>
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+            <button type="button" onclick="toggleEditarPedido('${idPedido}')" style="flex:1;min-width:100px;border:1px solid var(--line);background:white;color:var(--ink);padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✏️ Editar pedido</button>
+            <button type="button" onclick="eliminarPedido('${idPedido}')" style="flex:1;min-width:100px;border:1px solid var(--danger);background:white;color:var(--danger);padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">🗑️ Eliminar pedido</button>
+            ${(o.Estado!=='Completado' && o.Estado!=='Cerrado') ? `<button type="button" onclick="toggleCerrarPedido('${idPedido}')" style="flex:1;min-width:100px;border:1px solid var(--ink-soft);background:white;color:var(--ink-soft);padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">🔒 Cerrar pedido</button>` : ''}
+          </div>
+          <div id="cerrarPedidoForm-${idPedido}" style="display:none;background:#FCFBFA;border:1px dashed var(--ink-soft);border-radius:10px;padding:14px;margin-bottom:16px;">
+            <div class="readonly-note" style="margin-bottom:8px;">Esto cierra el pedido sin marcarlo como completado — úsalo cuando el saldo pendiente ya no se va a enviar y hay que esperar una orden nueva.</div>
+            <label style="display:block;font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:5px;">Razón del cierre *</label>
+            <textarea id="razonCierre-${idPedido}" placeholder="Ej: Cliente no requiere el saldo, se espera nueva OC." style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:10px;min-height:60px;font-family:inherit;"></textarea>
+            <button type="button" onclick="cerrarPedido('${idPedido}')" style="width:100%;background:var(--ink-soft);color:white;border:none;padding:9px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Confirmar cierre</button>
           </div>
           <div id="editarPedidoForm-${idPedido}" style="display:none;background:#FCFBFA;border:1px dashed var(--line);border-radius:10px;padding:14px;margin-bottom:16px;">
             <label style="display:block;font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:5px;">OC Cliente</label>
@@ -1312,7 +1330,7 @@ async function pintarDetalle(idPedido){
           </div>`).join('') : '<div class="entrega-item">Aún no se registran entregas para este pedido.</div>'}
 
         <h4 style="margin-top:20px;">Registrar nueva entrega</h4>
-        ${o.Estado==='Completado' ? `<div class="readonly-note">Este pedido ya está completado — no se pueden registrar más entregas.</div>` : canEdit ? `
+        ${o.Estado==='Completado' ? `<div class="readonly-note">Este pedido ya está completado — no se pueden registrar más entregas.</div>` : o.Estado==='Cerrado' ? `<div class="readonly-note">Este pedido fue cerrado manualmente (${o.Razon_Cierre||'sin razón registrada'}) — no se pueden registrar más entregas.</div>` : canEdit ? `
           <div class="add-entrega">
             <label>Control de tiempo de cargue</label>
             <div style="margin-bottom:12px;display:${(cargueState[idPedido] && cargueState[idPedido].inicio) ? 'none' : 'block'};" id="cargueBtnWrap-${idPedido}">
@@ -1349,6 +1367,29 @@ async function pintarDetalle(idPedido){
 function toggleEditarPedido(idPedido){
   const f = document.getElementById('editarPedidoForm-'+idPedido);
   f.style.display = (f.style.display==='none') ? 'block' : 'none';
+}
+
+function toggleCerrarPedido(idPedido){
+  const f = document.getElementById('cerrarPedidoForm-'+idPedido);
+  f.style.display = (f.style.display==='none') ? 'block' : 'none';
+}
+
+async function cerrarPedido(idPedido){
+  const razon = document.getElementById('razonCierre-'+idPedido).value.trim();
+  if(!razon){ showToast('⚠ Escribe la razón del cierre antes de confirmar.'); return; }
+  const list = pedidosCache[currentCompany]||[];
+  const o = list.find(p=>p.ID_Pedido===idPedido);
+  const confirmado = confirm(`¿Cerrar el pedido de "${o ? o.Razon_Social_Cliente : idPedido}" sin completarlo?\n\nQuedará marcado como "Cerrado", no como "Completado", y no se podrá volver a registrar entregas.`);
+  if(!confirmado) return;
+
+  showToast('Cerrando pedido...');
+  try{
+    const data = await llamarAPI({ accion:'cerrarPedido', idPedido, razon, cerradoPor: currentUser.nombre });
+    if(data.ok){
+      showToast('✅ Pedido cerrado.');
+      await cargarPedidos();
+    } else { showToast('Error: '+data.error); }
+  } catch(err){ showToast('Error de conexión: '+err.message); }
 }
 
 async function guardarEdicionPedido(idPedido){
@@ -1480,7 +1521,7 @@ function actualizarBadgeCargando(key){
   const col = document.getElementById('estadoCol-'+key);
   if(!o || !col) return;
   col.innerHTML = `
-    <span class="status-pill status-${o.Estado}">${o.Estado}</span>
+    <span class="status-pill status-${o.Estado}">${o.Estado==="Cerrado"?"🔒 Cerrado":o.Estado}</span>
     ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
     ${estaCargando(o) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
   `;
