@@ -1750,7 +1750,10 @@ async function confirmarCargaExcel(){
       pedidos: excelParsedRows
     });
     if(data.ok){
-      showToast(`✅ ${data.pedidosCargados} pedidos cargados correctamente.`);
+      const partes = [];
+      if(data.pedidosCargados) partes.push(`${data.pedidosCargados} nuevos`);
+      if(data.pedidosVinculados) partes.push(`${data.pedidosVinculados} ya existían con saldo pendiente (se reprogramaron, sin duplicar)`);
+      showToast(`✅ ${partes.join(' · ') || 'Planilla procesada'}.`);
       excelParsedRows = [];
       document.getElementById('excelPreviewWrap').style.display='none';
       document.getElementById('excelFile').value='';
@@ -1782,7 +1785,7 @@ async function cargarPedidoManual(){
   showToast('Cargando pedido...');
   try{
     const data = await llamarAPI(payload);
-    if(data.ok){ showToast('✅ Pedido cargado.'); document.getElementById('manualPanel').style.display='none'; await cargarPedidos(); }
+    if(data.ok){ showToast(data.pedidosVinculados ? '✅ Ya existía con saldo pendiente — se reprogramó la fecha, sin duplicar.' : '✅ Pedido cargado.'); document.getElementById('manualPanel').style.display='none'; await cargarPedidos(); }
     else { showToast('Error: '+data.error); }
   } catch(err){ showToast('Error de conexión: '+err.message); }
 }
