@@ -111,6 +111,11 @@
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:white;padding:12px 20px;border-radius:10px;font-size:12.5px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:80vw;text-align:center;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
   .loading{text-align:center;padding:40px;color:var(--ink-soft);font-size:13px;}
+  .spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.45);border-top-color:white;border-radius:50%;animation:girar .7s linear infinite;vertical-align:middle;margin-right:7px;}
+  .cargando-spinner{opacity:0.85;}
+  .cargando-spinner.upload-btn .spinner, .cargando-spinner .spinner{border-color:rgba(43,43,43,0.25);border-top-color:var(--ink);}
+  button[disabled]{cursor:not-allowed !important;}
+  @keyframes girar{to{transform:rotate(360deg);}}
 
   /* Selección múltiple */
   .order-check{width:22px;height:22px;border-radius:6px;border:2px solid var(--line);flex-shrink:0;display:none;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:white;font-weight:700;margin-right:4px;}
@@ -176,6 +181,7 @@
       <button type="button" class="clear" onclick="limpiarPin()">C</button>
     </div>
     <div class="login-error" id="loginError"></div>
+    <div id="loginVerificando" style="display:none;font-size:12px;color:var(--ink-soft);margin-top:8px;"><span class="spinner" style="border-color:rgba(43,43,43,0.25);border-top-color:var(--ink-soft);"></span>Verificando...</div>
   </div>
 </div>
 
@@ -209,7 +215,7 @@
   <div class="toolbar">
     <div></div>
     <div style="display:flex;gap:8px;">
-      <button class="upload-btn" id="btnUploadToggle" onclick="toggleUploadPanel()" style="display:none;">+ Cargar Excel</button>
+      <button class="upload-btn" id="btnUploadToggle" onclick="toggleUploadPanel()" style="display:none;">📂 Cargar planilla</button>
       <button class="upload-btn" id="btnManualToggle" onclick="toggleManualPanel()" style="display:none;">+ Pedido manual</button>
       <button class="upload-btn" id="btnNoProgramado" onclick="toggleNoProgramado()" style="border-color:var(--magenta);color:var(--magenta);">+ Despacho no programado</button>
       <button class="upload-btn" id="btnModoSeleccion" onclick="toggleModoSeleccion()" style="display:none;">☑ Selección múltiple</button>
@@ -219,14 +225,32 @@
   <div class="order" id="uploadPanel" style="display:none;margin-bottom:16px;">
     <div class="detail-inner" style="padding:16px 20px;grid-template-columns:1fr;">
       <div>
-        <h4>Cargar planilla desde Excel</h4>
-        <div class="readonly-note" style="margin-bottom:10px;">
-          Sube el archivo tal como te llega por correo. La app lee las columnas <strong>OC CLIENTE, PVT, RAZÓN SOCIAL CLIENTE, REFERENCIA, CANTIDAD DESPACHO, CIUDAD y NOVEDADES</strong>. Primero indica para qué día es esta programación — esa fecha se le asigna a todos los pedidos de este archivo, en vez de depender de lo que traiga la columna de fecha del Excel (para que la de mañana no se cargue como si fuera de hoy).
+        <h4>Cargar planilla</h4>
+        <div class="readonly-note" style="margin-bottom:12px;">
+          Para subir el plan del día completo (varios pedidos de una vez). La app lee las columnas <strong>OC CLIENTE, PVT, RAZÓN SOCIAL CLIENTE, REFERENCIA, CANTIDAD DESPACHO, CIUDAD y NOVEDADES</strong>.
         </div>
-        <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;">¿Para qué día es esta planilla? *</label>
-        <input type="date" id="excelFecha" style="border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13px;margin-bottom:12px;width:100%;max-width:220px;">
-        <input type="file" id="excelFile" accept=".xlsx,.xls" onchange="procesarExcel(event)" style="margin-bottom:12px;display:block;">
+
+        <div id="opcionCargaWrap" style="display:flex;gap:10px;margin-bottom:16px;">
+          <button type="button" onclick="elegirTipoCarga('excel')" id="optCargaExcel" style="flex:1;border:1.5px solid var(--line);background:white;padding:14px 10px;border-radius:10px;cursor:pointer;font-family:inherit;text-align:center;">
+            <span style="font-size:20px;display:block;margin-bottom:4px;">📊</span>
+            <span style="font-size:12px;font-weight:700;">Excel</span>
+          </button>
+          <button type="button" onclick="elegirTipoCarga('imagen')" id="optCargaImagen" style="flex:1;border:1.5px solid var(--line);background:white;padding:14px 10px;border-radius:10px;cursor:pointer;font-family:inherit;text-align:center;">
+            <span style="font-size:20px;display:block;margin-bottom:4px;">📷</span>
+            <span style="font-size:12px;font-weight:700;">Imagen</span>
+          </button>
+        </div>
+
+        <div id="pasosCarga" style="display:none;">
+          <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;">¿Para qué día es esta planilla? *</label>
+          <input type="date" id="excelFecha" style="border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13px;margin-bottom:12px;width:100%;max-width:220px;">
+          <label id="labelArchivoCarga" style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;">Selecciona el archivo</label>
+          <input type="file" id="excelFile" style="margin-bottom:12px;display:block;">
+          <button type="button" id="btnCargarPaso" onclick="ejecutarCarga()">Cargar</button>
+        </div>
+
         <div id="excelPreviewWrap" style="display:none;">
+          <div id="previewIntroImagen" style="display:none;font-size:12px;color:var(--ink-soft);margin-bottom:8px;">📷 Esto es lo que la IA leyó en la foto, organizado igual que un Excel — revisa que quedó bien antes de confirmar:</div>
           <div style="max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;">
             <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
               <thead style="position:sticky;top:0;background:#F1EFEA;">
@@ -236,7 +260,7 @@
             </table>
           </div>
           <div id="excelPreviewSummary" style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;"></div>
-          <button onclick="confirmarCargaExcel()">Confirmar y cargar estos pedidos</button>
+          <button id="btnConfirmarCargaExcel" onclick="conCarga(this, 'Guardando pedidos...', confirmarCargaExcel)">Confirmar y cargar estos pedidos</button>
         </div>
       </div>
     </div>
@@ -256,7 +280,7 @@
           <div><label>Ciudad</label><input type="text" id="upCiudad"></div>
           <div><label>Cantidad total</label><input type="number" id="upCantidad"></div>
         </div>
-        <button style="margin-top:6px;" onclick="cargarPedidoManual()">Cargar pedido</button>
+        <button style="margin-top:6px;" onclick="conCarga(this, 'Cargando pedido...', cargarPedidoManual)">Cargar pedido</button>
       </div>
     </div>
   </div>
@@ -278,7 +302,7 @@
         <div class="readonly-note" style="margin-top:4px;">
           Como se conoce la OC, este despacho se <strong>vinculará automáticamente</strong> al pedido programado cuando cargues la planilla que la contenga.
         </div>
-        <button style="margin-top:10px;" onclick="registrarNoProgramado()">Registrar despacho</button>
+        <button style="margin-top:10px;" onclick="conCarga(this, 'Registrando...', registrarNoProgramado)">Registrar despacho</button>
       </div>
     </div>
   </div>
@@ -313,21 +337,16 @@
   <div class="sheet">
     <button class="close-x" onclick="cerrarConsolidado()">✕</button>
     <h2>Registrar despacho — mismo vehículo</h2>
-    <p class="sub">El transportador y el tiempo de cargue se aplican a todos los pedidos seleccionados.</p>
+    <p class="sub">El conductor se aplica a todos los pedidos seleccionados; cada uno solo pide su cantidad.</p>
 
     <div class="shared-box">
-      <label style="display:block;">Transportador</label>
-      <input type="text" id="sharedTransportador" placeholder="Ej: Coordinadora">
-      <label style="display:block;">Control de tiempo de cargue</label>
-      <div id="sharedCargueBtnWrap">
-        <button type="button" onclick="iniciarCargueBatch()" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>
-      </div>
-      <div id="sharedCargueTime" style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;">Aún no se ha iniciado el cargue.</div>
+      <label style="display:block;">Conductor / Transportador</label>
+      <input type="text" id="sharedTransportador" placeholder="Ej: Coordinadora - Juan Pérez">
     </div>
 
     <div id="itemsSeleccionados"></div>
 
-    <button class="confirm-btn" onclick="confirmarDespachoMultiple()">⏹ Finalizar cargue y registrar todas las entregas</button>
+    <button class="confirm-btn" id="btnConfirmarMultiple" onclick="confirmarDespachoMultiple()">✅ Marcar todos como enviados</button>
   </div>
 </div>
 
@@ -341,7 +360,6 @@ let currentCompany = 'Contubos';
 let currentFilter = 'principal';
 let modoSeleccion = false;
 let seleccionados = new Set();
-let cargueBatch = { inicio: null, fin: null };
 let currentDayFilter = 'hoy';
 let pedidosCache = {};
 let noProgramadosCache = {};
@@ -360,6 +378,24 @@ function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+// Ayudante para que ningún botón deje a la persona "a ciegas" mientras se procesa algo:
+// deshabilita el botón, le pone un spinner + el texto que se le pase, y lo regresa a la normalidad
+// al terminar (haya salido bien o mal). Se usa envolviendo la acción real del botón.
+async function conCarga(boton, textoCargando, accion){
+  if(!boton){ await accion(); return; }
+  const textoOriginal = boton.innerHTML;
+  boton.disabled = true;
+  boton.classList.add('cargando-spinner');
+  boton.innerHTML = `<span class="spinner"></span>${textoCargando}`;
+  try{
+    await accion();
+  } finally {
+    boton.disabled = false;
+    boton.classList.remove('cargando-spinner');
+    boton.innerHTML = textoOriginal;
+  }
 }
 
 // ---------- LOGIN (teclado numérico) ----------
@@ -393,11 +429,24 @@ function limpiarPin(){
 }
 renderPinDots();
 
+// El teclado físico funciona solo, sin necesitar una casilla de texto visible — apenas la pantalla
+// de login está en pantalla, escribir números en el computador rellena los mismos puntos.
+document.addEventListener('keydown', (e)=>{
+  const loginVisible = document.getElementById('login').style.display !== 'none';
+  if(!loginVisible) return;
+  if(e.key >= '0' && e.key <= '9'){ tecla(e.key); }
+  if(e.key === 'Backspace' || e.key === 'Delete'){ limpiarPin(); }
+});
+
 async function hacerLogin(){
   const pin = pinActual;
   const errEl = document.getElementById('loginError');
   errEl.textContent = '';
   if(!pin){ errEl.textContent='Ingresa tu PIN.'; return; }
+  const verificando = document.getElementById('loginVerificando');
+  const botonesKeypad = document.querySelectorAll('.keypad button');
+  verificando.style.display = 'block';
+  botonesKeypad.forEach(b=>b.disabled = true);
   try{
     const data = await llamarAPI({ accion:'login', pin });
     if(!data.ok){
@@ -412,6 +461,9 @@ async function hacerLogin(){
     await cargarPedidos();
   } catch(err){
     errEl.textContent = 'Error de conexión: ' + err.message;
+  } finally {
+    verificando.style.display = 'none';
+    botonesKeypad.forEach(b=>b.disabled = false);
   }
 }
 
@@ -442,7 +494,6 @@ function logout(){
   // Limpia también el modo de selección múltiple, para que no se quede la barra/overlay flotando en el login
   modoSeleccion = false;
   seleccionados.clear();
-  cargueBatch = { inicio: null, fin: null };
   document.getElementById('floatbar').classList.remove('show');
   document.getElementById('overlaySeleccion').classList.remove('show');
   const btnSel = document.getElementById('btnModoSeleccion');
@@ -505,13 +556,9 @@ function irAInicio(){
 }
 
 // En celular, volver a abrir la app casi nunca recarga la página de verdad — solo la retoma
-// donde estaba. Esto detecta cuando vuelve a quedar visible y la deja en la vista normal otra vez —
-// PERO nunca si hay un cargue en curso (uno o varios vehículos), para no perder ese progreso
-// cuando se bloquea la pantalla, entra una llamada, o se cambia de app un momento.
+// donde estaba. Esto detecta cuando vuelve a quedar visible y la deja en la vista normal otra vez.
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'visible' && currentUser){
-    const hayCargueEnCurso = Object.values(cargueState).some(c=>c && c.inicio) || (cargueBatch && cargueBatch.inicio);
-    if(hayCargueEnCurso) return; // no toca nada — deja el cargue tal como estaba
     resetVistaPrincipal();
     render();
   }
@@ -555,29 +602,11 @@ async function cargarPedidos(){
       pedidosCache[currentCompany] = dataPedidos.pedidos;
       noProgramadosCache[currentCompany] = dataNoProg.ok ? dataNoProg.noProgramados : [];
       render();
-      await reabrirCarguesEnCurso();
     } else {
       document.getElementById('orderList').innerHTML = '<div class="empty">Error cargando pedidos: '+(dataPedidos.error||'')+'</div>';
     }
   } catch(err){
     document.getElementById('orderList').innerHTML = '<div class="empty">Error de conexión: '+err.message+'</div>';
-  }
-}
-
-// Si el navegador recargó la página de verdad (por bloqueo de pantalla, llamada, poca memoria, etc.)
-// mientras había un cargue en curso, esto vuelve a abrir esa tarjeta automáticamente al recargar los
-// pedidos — para que no parezca que "no pasó nada", sino que retoma justo donde ibas.
-async function reabrirCarguesEnCurso(){
-  const list = pedidosCache[currentCompany] || [];
-  const idsConCargue = Object.keys(cargueState).filter(k => cargueState[k] && cargueState[k].inicio);
-  for(const key of idsConCargue){
-    const o = list.find(p=>p.ID_Pedido===key);
-    if(!o) continue; // ese pedido no es de esta empresa/vista actual
-    const el = document.getElementById('order-'+key);
-    if(el && !el.classList.contains('open')){
-      el.classList.add('open');
-      await pintarDetalle(key);
-    }
   }
 }
 
@@ -696,8 +725,55 @@ function toggleHistorialPanel(){
 }
 function toggleUploadPanel(){
   const p = document.getElementById('uploadPanel');
-  p.style.display = (p.style.display==='none') ? 'block' : 'none';
+  const abrir = p.style.display==='none';
+  p.style.display = abrir ? 'block' : 'none';
+  if(abrir){
+    // Arranca siempre limpio: sin tipo elegido, sin pasos visibles, sin vista previa de una carga anterior
+    tipoCargaElegido = null;
+    document.getElementById('optCargaExcel').style.borderColor = 'var(--line)';
+    document.getElementById('optCargaExcel').style.background = 'white';
+    document.getElementById('optCargaImagen').style.borderColor = 'var(--line)';
+    document.getElementById('optCargaImagen').style.background = 'white';
+    document.getElementById('pasosCarga').style.display = 'none';
+    document.getElementById('excelPreviewWrap').style.display = 'none';
+    document.getElementById('excelFecha').value = '';
+    document.getElementById('excelFile').value = '';
+  }
 }
+
+let tipoCargaElegido = null;
+function elegirTipoCarga(tipo){
+  tipoCargaElegido = tipo;
+  const optExcel = document.getElementById('optCargaExcel');
+  const optImagen = document.getElementById('optCargaImagen');
+  optExcel.style.borderColor = tipo==='excel' ? 'var(--magenta)' : 'var(--line)';
+  optExcel.style.background = tipo==='excel' ? 'var(--magenta-soft)' : 'white';
+  optImagen.style.borderColor = tipo==='imagen' ? 'var(--magenta)' : 'var(--line)';
+  optImagen.style.background = tipo==='imagen' ? 'var(--magenta-soft)' : 'white';
+
+  document.getElementById('pasosCarga').style.display = 'block';
+  document.getElementById('excelPreviewWrap').style.display = 'none';
+  document.getElementById('excelFile').value = '';
+  const inputArchivo = document.getElementById('excelFile');
+  const label = document.getElementById('labelArchivoCarga');
+  if(tipo==='excel'){
+    inputArchivo.accept = '.xlsx,.xls';
+    label.textContent = 'Selecciona el archivo Excel';
+  } else {
+    inputArchivo.accept = 'image/*';
+    label.textContent = 'Selecciona o toma la foto de la planilla';
+  }
+}
+
+async function ejecutarCarga(){
+  const boton = document.getElementById('btnCargarPaso');
+  if(tipoCargaElegido==='imagen'){
+    await conCarga(boton, 'Leyendo imagen con IA...', procesarImagenPlanilla);
+  } else {
+    await conCarga(boton, 'Leyendo Excel...', procesarExcelDesdeInput);
+  }
+}
+
 function toggleManualPanel(){
   const p = document.getElementById('manualPanel');
   p.style.display = (p.style.display==='none') ? 'block' : 'none';
@@ -1079,7 +1155,6 @@ function render(){
         <div id="estadoCol-${key}">
           <span class="status-pill status-${o.Estado}">${o.Estado==="Cerrado"?"🔒 Cerrado":o.Estado}</span>
           ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
-          ${estaCargando(o) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
         </div>
         <div class="chevron">${modoSeleccion ? '' : '›'}</div>
       </div>
@@ -1113,11 +1188,7 @@ function actualizarFloatbar(){
 }
 
 function abrirConsolidado(){
-  cargueBatch = { inicio: null, fin: null };
   document.getElementById('sharedTransportador').value = '';
-  document.getElementById('sharedCargueTime').textContent = 'Aún no se ha iniciado el cargue.';
-  document.getElementById('sharedCargueTime').style.cssText = 'font-size:11.5px;color:var(--ink-soft);margin-top:8px;';
-  document.getElementById('sharedCargueBtnWrap').innerHTML = `<button type="button" onclick="iniciarCargueBatch()" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>`;
 
   const list = pedidosCache[currentCompany]||[];
   const wrap = document.getElementById('itemsSeleccionados');
@@ -1126,6 +1197,7 @@ function abrirConsolidado(){
     if(!o) return '';
     const esAbierta = String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
     const pendiente = esAbierta ? null : Math.max(0, (Number(o.Cantidad_Total)||0) - (Number(o.Cantidad_Entregada)||0));
+    const atrasado = esAtrasado(o) && o.Estado!=='Completado';
     return `
     <div class="item-row" data-id="${idPedido}" data-pendiente="${esAbierta ? '' : pendiente}" data-abierta="${esAbierta}">
       <div class="top">
@@ -1135,7 +1207,18 @@ function abrirConsolidado(){
         </div>
         <div class="pend" style="font-size:11px;color:var(--ink-soft);white-space:nowrap;">${esAbierta ? 'Cantidad abierta' : 'Pendiente: '+pendiente.toLocaleString()}</div>
       </div>
-      ${esAtrasado(o) && o.Estado!=='Completado' ? `<textarea placeholder="Razón del atraso (obligatoria)" data-tipo="razon" style="border-color:var(--danger);"></textarea>` : ''}
+      ${atrasado ? `
+        <label style="display:block;font-size:11px;color:var(--danger);font-weight:600;margin-bottom:4px;">⚠ Atrasado — motivo obligatorio</label>
+        <select data-tipo="razonMotivo" style="width:100%;border:1px solid var(--danger);border-radius:8px;padding:8px 10px;font-size:12px;font-family:inherit;margin-bottom:6px;">
+          <option value="">Selecciona un motivo...</option>
+          <option value="No está todo el producto">No está todo el producto</option>
+          <option value="No han hecho la entrada al sistema">No han hecho la entrada al sistema</option>
+          <option value="Transporte reasignado">Transporte reasignado</option>
+          <option value="Cliente pidió aplazar">Cliente pidió aplazar</option>
+          <option value="Otro">Otro (explicar abajo)</option>
+        </select>
+        <textarea placeholder="Explica brevemente qué pasó (obligatorio si el motivo es 'Otro')" data-tipo="razonDetalle" style="margin-bottom:6px;"></textarea>
+      ` : ''}
       <input type="number" placeholder="Cantidad despachada" oninput="verificarCantidadBatch(this)">
       <div class="alerta" style="display:none;background:var(--warn-soft);color:var(--warn);border-radius:6px;padding:6px 8px;font-size:11px;font-weight:600;margin-bottom:6px;"></div>
       <textarea placeholder="Explica por qué se envía menos o más (si aplica)" data-tipo="obs" style="display:none;"></textarea>
@@ -1143,21 +1226,11 @@ function abrirConsolidado(){
   }).join('');
 
   document.getElementById('overlaySeleccion').classList.add('show');
-  // Asegura que el control de cargue quede visible desde el primer momento (en algunos celulares
-  // el modal podía abrir con el scroll desplazado y esa parte quedaba oculta arriba).
   const sheetEl = document.querySelector('#overlaySeleccion .sheet');
   if(sheetEl) sheetEl.scrollTop = 0;
 }
 function cerrarConsolidado(){
   document.getElementById('overlaySeleccion').classList.remove('show');
-}
-
-function iniciarCargueBatch(){
-  cargueBatch.inicio = new Date();
-  document.getElementById('sharedCargueBtnWrap').style.display = 'none';
-  const timeEl = document.getElementById('sharedCargueTime');
-  timeEl.style.cssText = 'background:var(--ok-soft);border:1px solid var(--ok);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;color:var(--ok);margin-top:8px;';
-  timeEl.textContent = `✅ Cargue iniciado a las ${fmtHora(cargueBatch.inicio)} — en curso...`;
 }
 
 function verificarCantidadBatch(input){
@@ -1185,7 +1258,6 @@ function verificarCantidadBatch(input){
 }
 
 async function confirmarDespachoMultiple(){
-  if(!cargueBatch.inicio){ showToast('⚠ Primero da clic en "Inicio de cargue" antes de finalizar.'); return; }
   const transportador = document.getElementById('sharedTransportador').value;
   const filas = [...document.querySelectorAll('#itemsSeleccionados .item-row')];
   if(filas.length===0){ showToast('No hay pedidos seleccionados.'); return; }
@@ -1199,8 +1271,16 @@ async function confirmarDespachoMultiple(){
     const nombreCliente = fila.querySelector('.client').textContent;
     if(!cantidad || cantidad<=0){ showToast(`⚠ Falta la cantidad para "${nombreCliente}".`); return; }
 
-    const razonEl = fila.querySelector('[data-tipo="razon"]');
-    if(razonEl && !razonEl.value.trim()){ showToast(`⚠ Falta la razón de atraso para "${nombreCliente}".`); return; }
+    const motivoEl = fila.querySelector('[data-tipo="razonMotivo"]');
+    const detalleEl = fila.querySelector('[data-tipo="razonDetalle"]');
+    let razon = '';
+    if(motivoEl){
+      const motivo = motivoEl.value;
+      if(!motivo){ showToast(`⚠ Falta el motivo del atraso para "${nombreCliente}".`); return; }
+      const detalle = detalleEl ? detalleEl.value.trim() : '';
+      if(motivo==='Otro' && !detalle){ showToast(`⚠ Explica qué pasó con "${nombreCliente}".`); return; }
+      razon = detalle ? `${motivo}: ${detalle}` : motivo;
+    }
 
     const esAbierta = fila.dataset.abierta === 'true';
     const pendienteRaw = fila.dataset.pendiente;
@@ -1214,38 +1294,39 @@ async function confirmarDespachoMultiple(){
         detalleNovedad = obsEl.value.trim();
       }
     }
-    registros.push({ idPedido, cantidad, razon: razonEl ? razonEl.value.trim() : '', tipoNovedad, detalleNovedad });
+    registros.push({ idPedido, cantidad, razon, tipoNovedad, detalleNovedad });
   }
 
-  if(!cargueBatch.fin) cargueBatch.fin = new Date();
-  const horaInicio = fmtHora(cargueBatch.inicio);
-  const horaFin = fmtHora(cargueBatch.fin);
+  // Se captura una sola vez la fecha/hora del clic — aplica a todos los pedidos de este vehículo
+  const horaRegistro = fmtHora(new Date());
 
-  showToast('Registrando entregas...');
-  try{
-    for(const r of registros){
-      const data = await llamarAPI({ accion:'registrarEntrega', idPedido:r.idPedido, cantidad:r.cantidad, transportador, tipoNovedad:r.tipoNovedad, detalleNovedad:r.detalleNovedad, horaInicio, horaFin, registradoPor: currentUser.nombre });
-      if(data.ok){
-        actualizarPedidoLocal(r.idPedido, r.cantidad);
-        delete entregasCache[r.idPedido];
-        if(r.razon){
-          const list = pedidosCache[currentCompany]||[];
-          const o = list.find(p=>p.ID_Pedido===r.idPedido);
-          await llamarAPI({ accion:'registrarRazonAtraso', idPedido:r.idPedido, fechaProgramadaOriginal:o?o.Fecha_Entrega:'', razon:r.razon, registradoPor:currentUser.nombre });
+  const boton = document.getElementById('btnConfirmarMultiple');
+  await conCarga(boton, `Enviando ${registros.length} despachos...`, async ()=>{
+    try{
+      for(const r of registros){
+        const data = await llamarAPI({ accion:'registrarEntrega', idPedido:r.idPedido, cantidad:r.cantidad, transportador, tipoNovedad:r.tipoNovedad, detalleNovedad:r.detalleNovedad, horaInicio:horaRegistro, horaFin:horaRegistro, registradoPor: currentUser.nombre });
+        if(data.ok){
+          actualizarPedidoLocal(r.idPedido, r.cantidad);
+          delete entregasCache[r.idPedido];
+          if(r.razon){
+            const list = pedidosCache[currentCompany]||[];
+            const o = list.find(p=>p.ID_Pedido===r.idPedido);
+            await llamarAPI({ accion:'registrarRazonAtraso', idPedido:r.idPedido, fechaProgramadaOriginal:o?o.Fecha_Entrega:'', razon:r.razon, registradoPor:currentUser.nombre });
+          }
         }
       }
+      showToast(`✅ ${registros.length} despachos marcados como enviados.`);
+      cerrarConsolidado();
+      seleccionados.clear();
+      modoSeleccion = false;
+      document.getElementById('btnModoSeleccion').classList.remove('active');
+      document.getElementById('btnModoSeleccion').textContent = '☑ Selección múltiple';
+      actualizarFloatbar();
+      render(); // ya no vuelve a pedirle todo al backend — se actualizó en memoria arriba
+    } catch(err){
+      showToast('Error de conexión: '+err.message);
     }
-    showToast(`✅ ${registros.length} entregas registradas correctamente.`);
-    cerrarConsolidado();
-    seleccionados.clear();
-    modoSeleccion = false;
-    document.getElementById('btnModoSeleccion').classList.remove('active');
-    document.getElementById('btnModoSeleccion').textContent = '☑ Selección múltiple';
-    actualizarFloatbar();
-    render(); // ya no vuelve a pedirle todo al backend — se actualizó en memoria arriba
-  } catch(err){
-    showToast('Error de conexión: '+err.message);
-  }
+  });
 }
 
 async function toggleOrder(key){
@@ -1263,15 +1344,6 @@ async function pintarDetalle(idPedido){
   const esAbierta = String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
   const pendiente = esAbierta ? null : Math.max(0, (Number(o.Cantidad_Total)||0) - (Number(o.Cantidad_Entregada)||0));
   const pendienteTexto = esAbierta ? '' : pendiente.toLocaleString()+' unds';
-
-  // Si el Sheet dice que hay un cargue en curso (lo inició otro dispositivo/usuario) y este dispositivo
-  // todavía no lo tiene localmente, se adopta aquí — así se puede ver y finalizar desde cualquier lado.
-  if(!cargueState[idPedido] && o.Cargue_Inicio){
-    const partes = o.Cargue_Inicio.split(':').map(Number);
-    const fecha = new Date();
-    fecha.setHours(partes[0]||0, partes[1]||0, partes[2]||0, 0);
-    cargueState[idPedido] = { inicio: fecha, fin: null };
-  }
 
   if(!entregasCache[idPedido]){
     try{
@@ -1291,14 +1363,14 @@ async function pintarDetalle(idPedido){
         ${esJefe ? `
           <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
             <button type="button" onclick="toggleEditarPedido('${idPedido}')" style="flex:1;min-width:100px;border:1px solid var(--line);background:white;color:var(--ink);padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✏️ Editar pedido</button>
-            <button type="button" onclick="eliminarPedido('${idPedido}')" style="flex:1;min-width:100px;border:1px solid var(--danger);background:white;color:var(--danger);padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">🗑️ Eliminar pedido</button>
+            <button type="button" onclick="conCarga(this, 'Eliminando...', ()=>eliminarPedido('${idPedido}'))" style="flex:1;min-width:100px;border:1px solid var(--danger);background:white;color:var(--danger);padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">🗑️ Eliminar pedido</button>
             ${(o.Estado!=='Completado' && o.Estado!=='Cerrado') ? `<button type="button" onclick="toggleCerrarPedido('${idPedido}')" style="flex:1;min-width:100px;border:1px solid var(--ink-soft);background:white;color:var(--ink-soft);padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">🔒 Cerrar pedido</button>` : ''}
           </div>
           <div id="cerrarPedidoForm-${idPedido}" style="display:none;background:#FCFBFA;border:1px dashed var(--ink-soft);border-radius:10px;padding:14px;margin-bottom:16px;">
             <div class="readonly-note" style="margin-bottom:8px;">Esto cierra el pedido sin marcarlo como completado — úsalo cuando el saldo pendiente ya no se va a enviar y hay que esperar una orden nueva.</div>
             <label style="display:block;font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:5px;">Razón del cierre *</label>
             <textarea id="razonCierre-${idPedido}" placeholder="Ej: Cliente no requiere el saldo, se espera nueva OC." style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:10px;min-height:60px;font-family:inherit;"></textarea>
-            <button type="button" onclick="cerrarPedido('${idPedido}')" style="width:100%;background:var(--ink-soft);color:white;border:none;padding:9px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Confirmar cierre</button>
+            <button type="button" onclick="conCarga(this, 'Cerrando...', ()=>cerrarPedido('${idPedido}'))" style="width:100%;background:var(--ink-soft);color:white;border:none;padding:9px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Confirmar cierre</button>
           </div>
           <div id="editarPedidoForm-${idPedido}" style="display:none;background:#FCFBFA;border:1px dashed var(--line);border-radius:10px;padding:14px;margin-bottom:16px;">
             <label style="display:block;font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:5px;">OC Cliente</label>
@@ -1315,7 +1387,7 @@ async function pintarDetalle(idPedido){
             <input type="text" id="editFecha-${idPedido}" value="${o.Fecha_Entrega||''}" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:8px;">
             <label style="display:block;font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:5px;">Cantidad total (o "Abierta")</label>
             <input type="text" id="editCantidad-${idPedido}" value="${o.Cantidad_Total||''}" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:10px;">
-            <button type="button" onclick="guardarEdicionPedido('${idPedido}')" style="width:100%;background:var(--ink);color:white;border:none;padding:9px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Guardar cambios</button>
+            <button type="button" onclick="conCarga(this, 'Guardando...', ()=>guardarEdicionPedido('${idPedido}'))" style="width:100%;background:var(--ink);color:white;border:none;padding:9px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Guardar cambios</button>
           </div>
         ` : ''}
 
@@ -1329,22 +1401,27 @@ async function pintarDetalle(idPedido){
             </div>
           </div>`).join('') : '<div class="entrega-item">Aún no se registran entregas para este pedido.</div>'}
 
-        <h4 style="margin-top:20px;">Registrar nueva entrega</h4>
+        <h4 style="margin-top:20px;">Registrar despacho</h4>
         ${o.Estado==='Completado' ? `<div class="readonly-note">Este pedido ya está completado — no se pueden registrar más entregas.</div>` : o.Estado==='Cerrado' ? `<div class="readonly-note">Este pedido fue cerrado manualmente (${o.Razon_Cierre||'sin razón registrada'}) — no se pueden registrar más entregas.</div>` : canEdit ? `
           <div class="add-entrega">
-            <label>Control de tiempo de cargue</label>
-            <div style="margin-bottom:12px;display:${(cargueState[idPedido] && cargueState[idPedido].inicio) ? 'none' : 'block'};" id="cargueBtnWrap-${idPedido}">
-              <button type="button" id="btnIniciar-${idPedido}" onclick="iniciarCargue('${idPedido}')" style="width:100%;background:var(--ok);color:white;border:none;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Inicio de cargue</button>
-            </div>
-            <div id="cargueTime-${idPedido}" style="margin-bottom:12px;${(cargueState[idPedido] && cargueState[idPedido].inicio) ? 'background:var(--ok-soft);border:1px solid var(--ok);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;color:var(--ok);' : 'font-size:11.5px;color:var(--ink-soft);'}">${(cargueState[idPedido] && cargueState[idPedido].inicio) ? `✅ Cargue iniciado a las ${fmtHora(cargueState[idPedido].inicio)}${o.Cargue_Iniciado_Por ? ' por '+o.Cargue_Iniciado_Por : ''} — en curso...` : 'Aún no se ha iniciado el cargue.'}</div>
             ${(esAtrasado(o) && o.Estado!=='Completado') ? `
               <div style="background:var(--danger-soft);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
                 <label style="color:var(--danger);">⚠ Despacho atrasado — razón obligatoria</label>
-                <textarea placeholder="Ej: Transporte reasignado, se despacha mañana." id="razon-${idPedido}"></textarea>
+                <select id="razonMotivo-${idPedido}" onchange="toggleRazonDetalle('${idPedido}')" style="margin-bottom:8px;">
+                  <option value="">Selecciona un motivo...</option>
+                  <option value="No está todo el producto">No está todo el producto</option>
+                  <option value="No han hecho la entrada al sistema">No han hecho la entrada al sistema</option>
+                  <option value="Transporte reasignado">Transporte reasignado</option>
+                  <option value="Cliente pidió aplazar">Cliente pidió aplazar</option>
+                  <option value="Otro">Otro (explicar abajo)</option>
+                </select>
+                <div id="razonDetalleWrap-${idPedido}" style="display:none;">
+                  <textarea placeholder="Explica brevemente qué pasó..." id="razon-${idPedido}"></textarea>
+                </div>
               </div>
             ` : ''}
-            <label>${esClienteRecoge(o) ? 'Quién recoge (nombre y documento/placa)' : 'Transportador'}</label>
-            <input type="text" id="transp-${idPedido}" value="${(cargueState[idPedido] && cargueState[idPedido].transportador) || ''}" oninput="guardarTransportadorEnCurso('${idPedido}', this.value)" placeholder="${esClienteRecoge(o) ? 'Ej: Juan Pérez, CC 123456 / placa ABC123' : 'Ej: Coordinadora'}">
+            <label>${esClienteRecoge(o) ? 'Quién recoge (nombre y documento/placa)' : 'Conductor / Transportador'}</label>
+            <input type="text" id="transp-${idPedido}" placeholder="${esClienteRecoge(o) ? 'Ej: Juan Pérez, CC 123456 / placa ABC123' : 'Ej: Coordinadora - Juan Pérez'}">
             <label>Cantidad despachada${(!esAbierta) ? ` <span style="font-weight:400;color:var(--ink-soft);">(pendiente: ${pendienteTexto})</span>` : ''}</label>
             <input type="number" id="cant-${idPedido}" placeholder="Ej: 2000" oninput="verificarCantidad('${idPedido}', ${esAbierta ? 'null' : pendiente})">
             <div id="alertaCantidad-${idPedido}" style="display:none;background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:11.5px;font-weight:600;margin-bottom:10px;"></div>
@@ -1358,7 +1435,7 @@ async function pintarDetalle(idPedido){
               <option value="Pendiente entrada en sistema">Pendiente entrada en sistema</option>
             </select>
             <div id="novDetalle-${idPedido}" style="display:none;"><label>Describe qué sucedió</label><textarea id="novTexto-${idPedido}" rows="2"></textarea></div>
-            <button id="btnFinalizar-${idPedido}" onclick="registrarEntrega('${idPedido}')" style="background:var(--danger);">⏹ Finalizar cargue y registrar entrega</button>
+            <button id="btnFinalizar-${idPedido}" onclick="registrarEntrega('${idPedido}')" style="background:var(--ok);">✅ Marcar como enviado</button>
           </div>` : `<div class="readonly-note">Tu rol es de consulta — puedes ver el estado del pedido pero no registrar entregas.</div>`}
       </div>
     </div>`;
@@ -1473,82 +1550,13 @@ function verificarCantidad(idPedido, pendiente){
   desplazarHastaFinalizar(idPedido);
 }
 
-// ---------- CARGUE (inicio/fin) ----------
-const cargueState = {};
+// ---------- HORA (para registrar el despacho) ----------
 function fmtHora(d){
-  // Formato 24h garantizado (HH:mm:ss) — necesario para que el backend calcule bien la duración del cargue
+  // Formato 24h garantizado (HH:mm:ss)
   const hh = String(d.getHours()).padStart(2,'0');
   const mm = String(d.getMinutes()).padStart(2,'0');
   const ss = String(d.getSeconds()).padStart(2,'0');
   return `${hh}:${mm}:${ss}`;
-}
-// Guarda el cargue en curso también en el dispositivo, para que sobreviva incluso si el navegador
-// llega a recargar la página de verdad (no solo pausarla) mientras varios vehículos están cargando.
-function guardarCargueEnDisco(){
-  try{
-    const plano = {};
-    Object.keys(cargueState).forEach(k=>{
-      if(cargueState[k] && cargueState[k].inicio){
-        plano[k] = { inicio: cargueState[k].inicio.toISOString(), transportador: cargueState[k].transportador || '' };
-      }
-    });
-    localStorage.setItem('despachoPT_cargueEnCurso', JSON.stringify(plano));
-  } catch(e){}
-}
-function restaurarCargueDeDisco(){
-  try{
-    const guardado = JSON.parse(localStorage.getItem('despachoPT_cargueEnCurso') || '{}');
-    Object.keys(guardado).forEach(k=>{
-      const g = guardado[k];
-      cargueState[k] = { inicio: new Date(g.inicio || g), fin: null, transportador: g.transportador || '' };
-    });
-  } catch(e){}
-}
-function guardarTransportadorEnCurso(idPedido, valor){
-  if(!cargueState[idPedido]) return;
-  cargueState[idPedido].transportador = valor;
-  guardarCargueEnDisco();
-}
-restaurarCargueDeDisco(); // se restaura aquí mismo, justo después de declarar cargueState arriba
-// Un pedido se ve "cargando" si el Sheet dice que hay un cargue en curso (Cargue_Inicio lleno,
-// visible para cualquier dispositivo/usuario) o si este mismo dispositivo lo inició hace un momento.
-function estaCargando(o){
-  return !!(o && o.Cargue_Inicio) || !!(cargueState[o && o.ID_Pedido] && cargueState[o.ID_Pedido].inicio);
-}
-function actualizarBadgeCargando(key){
-  const list = pedidosCache[currentCompany]||[];
-  const o = list.find(p=>p.ID_Pedido===key);
-  const col = document.getElementById('estadoCol-'+key);
-  if(!o || !col) return;
-  col.innerHTML = `
-    <span class="status-pill status-${o.Estado}">${o.Estado==="Cerrado"?"🔒 Cerrado":o.Estado}</span>
-    ${esAtrasado(o) ? `<div style="margin-top:5px;"><span class="status-pill status-flag-atrasado">⏰ Atrasado</span></div>` : ''}
-    ${estaCargando(o) ? `<div style="margin-top:5px;"><span class="status-pill" style="background:var(--ok);color:white;">🚛 Cargando...</span></div>` : ''}
-  `;
-}
-async function iniciarCargue(key){
-  cargueState[key] = { inicio:new Date(), fin:null };
-  guardarCargueEnDisco();
-  const wrap = document.getElementById('cargueBtnWrap-'+key);
-  if(wrap) wrap.style.display = 'none';
-  const timeEl = document.getElementById('cargueTime-'+key);
-  timeEl.style.background = 'var(--ok-soft)';
-  timeEl.style.border = '1px solid var(--ok)';
-  timeEl.style.borderRadius = '8px';
-  timeEl.style.padding = '10px 12px';
-  timeEl.style.fontSize = '13px';
-  timeEl.style.fontWeight = '700';
-  timeEl.style.color = 'var(--ok)';
-  timeEl.innerHTML = `✅ Cargue iniciado a las ${fmtHora(cargueState[key].inicio)} — en curso...`;
-  actualizarBadgeCargando(key); // se ve el "🚛 Cargando" en la tarjeta sin cerrar este panel
-
-  // Avisa al backend para que se vea "cargando" también desde cualquier otro dispositivo/usuario
-  const list = pedidosCache[currentCompany]||[];
-  const o = list.find(p=>p.ID_Pedido===key);
-  if(o){ o.Cargue_Inicio = fmtHora(cargueState[key].inicio); o.Cargue_Iniciado_Por = currentUser.nombre; }
-  try{
-    await llamarAPI({ accion:'iniciarCargueRemoto', idPedido:key, horaInicio: fmtHora(cargueState[key].inicio), iniciadoPor: currentUser.nombre });
-  } catch(err){ /* si falla el aviso remoto, el cargue local sigue funcionando igual */ }
 }
 
 // ---------- ACCIONES REALES CONTRA EL BACKEND ----------
@@ -1568,9 +1576,6 @@ function actualizarPedidoLocal(idPedido, cantidadSumada){
 }
 
 async function registrarEntrega(idPedido){
-  const c = cargueState[idPedido];
-  if(!c || !c.inicio){ showToast('⚠ Primero da clic en "Inicio de cargue" antes de finalizar.'); return; }
-
   const cantidad = document.getElementById('cant-'+idPedido).value;
   if(!cantidad || Number(cantidad)<=0){ showToast('Ingresa una cantidad válida.'); return; }
   const transportador = document.getElementById('transp-'+idPedido).value;
@@ -1589,34 +1594,46 @@ async function registrarEntrega(idPedido){
     }
   }
 
-  // Si el pedido está atrasado, la razón es obligatoria antes de poder finalizar
+  // Si el pedido está atrasado, la razón es obligatoria antes de poder marcar como enviado
   const requiereRazon = o && esAtrasado(o) && o.Estado!=='Completado';
-  const razonEl = document.getElementById('razon-'+idPedido);
-  const razon = razonEl ? razonEl.value.trim() : '';
-  if(requiereRazon && !razon){ showToast('⚠ Este pedido está atrasado — escribe la razón antes de finalizar.'); return; }
+  let razon = '';
+  if(requiereRazon){
+    const motivoEl = document.getElementById('razonMotivo-'+idPedido);
+    const detalleEl = document.getElementById('razon-'+idPedido);
+    const motivo = motivoEl ? motivoEl.value : '';
+    if(!motivo){ showToast('⚠ Este pedido está atrasado — selecciona el motivo antes de continuar.'); return; }
+    const detalle = detalleEl ? detalleEl.value.trim() : '';
+    if(motivo==='Otro' && !detalle){ showToast('⚠ Explica brevemente qué pasó.'); return; }
+    razon = detalle ? `${motivo}: ${detalle}` : motivo;
+  }
 
-  // "Finalizar cargue" captura la hora de fin en este mismo clic
-  if(!c.fin){ c.fin = new Date(); }
-  const horaInicio = fmtHora(c.inicio);
-  const horaFin = fmtHora(c.fin);
+  // Se captura la fecha y hora exactas en este mismo clic — ya no hace falta iniciar/finalizar cargue por separado
+  const ahora = new Date();
+  const horaRegistro = fmtHora(ahora);
 
-  showToast('Registrando entrega...');
-  try{
-    const data = await llamarAPI({ accion:'registrarEntrega', idPedido, cantidad, transportador, tipoNovedad, detalleNovedad, horaInicio, horaFin, registradoPor: currentUser.nombre });
-    if(data.ok){
-      if(requiereRazon && razon){
-        await llamarAPI({ accion:'registrarRazonAtraso', idPedido, fechaProgramadaOriginal:o.Fecha_Entrega, razon, registradoPor:currentUser.nombre });
-      }
-      showToast('✅ Entrega registrada correctamente.');
-      delete entregasCache[idPedido];
-      delete cargueState[idPedido];
-      guardarCargueEnDisco();
-      actualizarPedidoLocal(idPedido, cantidad); // actualiza al instante, sin esperar otra llamada al backend
-      render();
-      document.getElementById('order-'+idPedido).classList.add('open');
-      await pintarDetalle(idPedido);
-    } else { showToast('Error: '+data.error); }
-  } catch(err){ showToast('Error de conexión: '+err.message); }
+  const boton = document.getElementById('btnFinalizar-'+idPedido);
+  await conCarga(boton, 'Enviando...', async ()=>{
+    try{
+      const data = await llamarAPI({ accion:'registrarEntrega', idPedido, cantidad, transportador, tipoNovedad, detalleNovedad, horaInicio: horaRegistro, horaFin: horaRegistro, registradoPor: currentUser.nombre });
+      if(data.ok){
+        if(requiereRazon && razon){
+          await llamarAPI({ accion:'registrarRazonAtraso', idPedido, fechaProgramadaOriginal:o.Fecha_Entrega, razon, registradoPor:currentUser.nombre });
+        }
+        showToast('✅ Marcado como enviado.');
+        delete entregasCache[idPedido];
+        actualizarPedidoLocal(idPedido, cantidad); // actualiza al instante, sin esperar otra llamada al backend
+        render();
+        document.getElementById('order-'+idPedido).classList.add('open');
+        await pintarDetalle(idPedido);
+      } else { showToast('Error: '+data.error); }
+    } catch(err){ showToast('Error de conexión: '+err.message); }
+  });
+}
+
+function toggleRazonDetalle(idPedido){
+  const sel = document.getElementById('razonMotivo-'+idPedido).value;
+  const wrap = document.getElementById('razonDetalleWrap-'+idPedido);
+  wrap.style.display = sel ? 'block' : 'none';
 }
 
 
@@ -1694,68 +1711,122 @@ function normalizarFechaExcel_(valor){
   return String(valor);
 }
 
-function procesarExcel(event){
-  const file = event.target.files[0];
-  if(!file) return;
+function procesarExcelDesdeInput(){
+  return new Promise((resolve)=>{
+    const file = document.getElementById('excelFile').files[0];
+    if(!file){ showToast('⚠ Selecciona un archivo Excel primero.'); resolve(); return; }
 
-  const fechaSeleccionada = document.getElementById('excelFecha').value;
-  if(!fechaSeleccionada){
-    showToast('⚠ Primero indica para qué día es esta planilla, arriba del botón de subir archivo.');
-    event.target.value = '';
-    return;
-  }
-  const fechaFormateada = fechaSeleccionada.split('-').reverse().join('/');
-
-  const reader = new FileReader();
-  reader.onload = function(e){
-    try{
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type:'array', cellDates:false });
-      const primeraHoja = workbook.Sheets[workbook.SheetNames[0]];
-      const filas = XLSX.utils.sheet_to_json(primeraHoja, { header:1, raw:true, defval:'' });
-
-      if(filas.length < 2){ showToast('El archivo no tiene filas de datos.'); return; }
-
-      // La planilla suele traer un título/logo arriba (como "PEDIDOS REALIZADOS...") antes de los
-      // encabezados reales, así que buscamos entre las primeras 10 filas cuál es la fila de encabezados
-      // (la que contenga "OC CLIENTE" o similar), en vez de asumir que siempre es la fila 1.
-      let filaEncabezado = -1;
-      let columnasEncontradas = [];
-      for(let f=0; f<Math.min(10, filas.length); f++){
-        const candidatos = filas[f].map(normalizarEncabezado_);
-        const mapeo = candidatos.map(h => MAPA_COLUMNAS[h] || null);
-        if(mapeo.includes('ocCliente') && (mapeo.includes('cantidad') || mapeo.includes('referencia'))){
-          filaEncabezado = f;
-          columnasEncontradas = mapeo;
-          break;
-        }
-      }
-
-      if(filaEncabezado === -1){
-        showToast('No se reconocieron las columnas OC CLIENTE y/o CANTIDAD — revisa los encabezados del archivo.');
-        return;
-      }
-
-      excelParsedRows = [];
-      for(let i=filaEncabezado+1; i<filas.length; i++){
-        const fila = filas[i];
-        if(!fila || fila.join('')==='') continue;
-        const obj = { empresa: currentCompany, fecha: fechaFormateada };
-        columnasEncontradas.forEach((campo, idx) => {
-          if(!campo || campo === 'fecha') return; // la fecha la define el selector de arriba, no la columna del Excel
-          let valor = fila[idx];
-          if(campo === 'cantidad' && (valor === '' || valor === undefined || valor === null)) valor = 'Abierta';
-          obj[campo] = valor !== undefined && valor !== null ? valor : '';
-        });
-        if(obj.ocCliente) excelParsedRows.push(obj);
-      }
-
-      pintarPreviewExcel();
-    } catch(err){
-      showToast('Error leyendo el archivo: '+err.message);
+    const fechaSeleccionada = document.getElementById('excelFecha').value;
+    if(!fechaSeleccionada){
+      showToast('⚠ Primero indica para qué día es esta planilla.');
+      resolve();
+      return;
     }
-  };
-  reader.readAsArrayBuffer(file);
+    const fechaFormateada = fechaSeleccionada.split('-').reverse().join('/');
+
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type:'array', cellDates:false });
+        const primeraHoja = workbook.Sheets[workbook.SheetNames[0]];
+        const filas = XLSX.utils.sheet_to_json(primeraHoja, { header:1, raw:true, defval:'' });
+
+        if(filas.length < 2){ showToast('El archivo no tiene filas de datos.'); resolve(); return; }
+
+        // La planilla suele traer un título/logo arriba (como "PEDIDOS REALIZADOS...") antes de los
+        // encabezados reales, así que buscamos entre las primeras 10 filas cuál es la fila de encabezados
+        // (la que contenga "OC CLIENTE" o similar), en vez de asumir que siempre es la fila 1.
+        let filaEncabezado = -1;
+        let columnasEncontradas = [];
+        for(let f=0; f<Math.min(10, filas.length); f++){
+          const candidatos = filas[f].map(normalizarEncabezado_);
+          const mapeo = candidatos.map(h => MAPA_COLUMNAS[h] || null);
+          if(mapeo.includes('ocCliente') && (mapeo.includes('cantidad') || mapeo.includes('referencia'))){
+            filaEncabezado = f;
+            columnasEncontradas = mapeo;
+            break;
+          }
+        }
+
+        if(filaEncabezado === -1){
+          showToast('No se reconocieron las columnas OC CLIENTE y/o CANTIDAD — revisa los encabezados del archivo.');
+          resolve();
+          return;
+        }
+
+        excelParsedRows = [];
+        for(let i=filaEncabezado+1; i<filas.length; i++){
+          const fila = filas[i];
+          if(!fila || fila.join('')==='') continue;
+          const obj = { empresa: currentCompany, fecha: fechaFormateada };
+          columnasEncontradas.forEach((campo, idx) => {
+            if(!campo || campo === 'fecha') return; // la fecha la define el selector de arriba, no la columna del Excel
+            let valor = fila[idx];
+            if(campo === 'cantidad' && (valor === '' || valor === undefined || valor === null)) valor = 'Abierta';
+            obj[campo] = valor !== undefined && valor !== null ? valor : '';
+          });
+          if(obj.ocCliente) excelParsedRows.push(obj);
+        }
+
+        document.getElementById('previewIntroImagen').style.display = 'none';
+        pintarPreviewExcel();
+      } catch(err){
+        showToast('Error leyendo el archivo: '+err.message);
+      }
+      resolve();
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// Lee la foto de la planilla con IA (Gemini) y la organiza en las mismas filas/columnas que usa el Excel,
+// para que después se confirme y se cargue exactamente igual.
+function procesarImagenPlanilla(){
+  return new Promise((resolve)=>{
+    const file = document.getElementById('excelFile').files[0];
+    if(!file){ showToast('⚠ Selecciona o toma una foto primero.'); resolve(); return; }
+
+    const fechaSeleccionada = document.getElementById('excelFecha').value;
+    if(!fechaSeleccionada){
+      showToast('⚠ Primero indica para qué día es esta planilla.');
+      resolve();
+      return;
+    }
+    const fechaFormateada = fechaSeleccionada.split('-').reverse().join('/');
+
+    const reader = new FileReader();
+    reader.onload = async function(e){
+      try{
+        const base64Completo = e.target.result; // "data:image/jpeg;base64,AAAA..."
+        const base64Puro = base64Completo.split(',')[1];
+        const data = await llamarAPI({ accion:'leerImagenPlanilla', imagenBase64: base64Puro, mimeType: file.type || 'image/jpeg' });
+
+        if(!data.ok){ showToast('Error leyendo la imagen: '+data.error); resolve(); return; }
+
+        excelParsedRows = data.filas.map(f => ({
+          empresa: currentCompany,
+          fecha: fechaFormateada,
+          ocCliente: f.ocCliente || '',
+          pvt: f.pvt || '',
+          cliente: f.cliente || '',
+          referencia: f.referencia || '',
+          ciudad: f.ciudad || '',
+          cantidad: (f.cantidad === '' || f.cantidad === undefined || f.cantidad === null) ? 'Abierta' : f.cantidad,
+          notas: f.notas || ''
+        })).filter(f => f.ocCliente);
+
+        if(excelParsedRows.length === 0){ showToast('No se reconoció ninguna fila válida en la imagen.'); resolve(); return; }
+
+        document.getElementById('previewIntroImagen').style.display = 'block';
+        pintarPreviewExcel();
+      } catch(err){
+        showToast('Error leyendo la imagen: '+err.message);
+      }
+      resolve();
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function pintarPreviewExcel(){
