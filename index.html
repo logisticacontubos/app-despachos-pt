@@ -225,33 +225,19 @@
   <div class="order" id="uploadPanel" style="display:none;margin-bottom:16px;">
     <div class="detail-inner" style="padding:16px 20px;grid-template-columns:1fr;">
       <div>
-        <h4>Cargar planilla</h4>
+        <h4>Cargar planilla desde Excel</h4>
         <div class="readonly-note" style="margin-bottom:12px;">
-          Para subir el plan del día completo (varios pedidos de una vez). La app lee las columnas <strong>OC CLIENTE, PVT, RAZÓN SOCIAL CLIENTE, REFERENCIA, CANTIDAD DESPACHO, CIUDAD y NOVEDADES</strong>.
+          Sube el archivo tal como te llega. La app lee las columnas <strong>OC CLIENTE, PVT, RAZÓN SOCIAL CLIENTE, REFERENCIA, CANTIDAD DESPACHO, CIUDAD y NOVEDADES</strong>.
         </div>
 
-        <div id="opcionCargaWrap" style="display:flex;gap:10px;margin-bottom:16px;">
-          <button type="button" onclick="elegirTipoCarga('excel')" id="optCargaExcel" style="flex:1;border:1.5px solid var(--line);background:white;padding:14px 10px;border-radius:10px;cursor:pointer;font-family:inherit;text-align:center;">
-            <span style="font-size:20px;display:block;margin-bottom:4px;">📊</span>
-            <span style="font-size:12px;font-weight:700;">Excel</span>
-          </button>
-          <button type="button" onclick="elegirTipoCarga('imagen')" id="optCargaImagen" style="flex:1;border:1.5px solid var(--line);background:white;padding:14px 10px;border-radius:10px;cursor:pointer;font-family:inherit;text-align:center;">
-            <span style="font-size:20px;display:block;margin-bottom:4px;">📷</span>
-            <span style="font-size:12px;font-weight:700;">Imagen</span>
-          </button>
-        </div>
-
-        <div id="pasosCarga" style="display:none;">
-          <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;">¿Para qué día es esta planilla? *</label>
-          <input type="date" id="excelFecha" style="border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13px;margin-bottom:12px;width:100%;max-width:220px;">
-          <label id="labelArchivoCarga" style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;">Selecciona el archivo</label>
-          <input type="file" id="excelFile" style="margin-bottom:12px;display:block;">
-          <button type="button" id="btnCargarPaso" onclick="ejecutarCarga()">Cargar</button>
-        </div>
+        <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;">¿Para qué día es esta planilla? *</label>
+        <input type="date" id="excelFecha" style="border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13px;margin-bottom:12px;width:100%;max-width:220px;">
+        <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;">Selecciona el archivo Excel</label>
+        <input type="file" id="excelFile" accept=".xlsx,.xls" style="margin-bottom:12px;display:block;">
+        <button type="button" id="btnCargarPaso" onclick="conCarga(this, 'Leyendo Excel...', procesarExcelDesdeInput)">Cargar</button>
 
         <div id="excelPreviewWrap" style="display:none;">
-          <div id="previewIntroImagen" style="display:none;font-size:12px;color:var(--ink-soft);margin-bottom:8px;">📷 Esto es lo que la IA leyó en la foto, organizado igual que un Excel — revisa que quedó bien antes de confirmar:</div>
-          <div style="max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;">
+          <div style="max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;margin-top:14px;">
             <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
               <thead style="position:sticky;top:0;background:#F1EFEA;">
                 <tr id="excelPreviewHeader"></tr>
@@ -728,49 +714,10 @@ function toggleUploadPanel(){
   const abrir = p.style.display==='none';
   p.style.display = abrir ? 'block' : 'none';
   if(abrir){
-    // Arranca siempre limpio: sin tipo elegido, sin pasos visibles, sin vista previa de una carga anterior
-    tipoCargaElegido = null;
-    document.getElementById('optCargaExcel').style.borderColor = 'var(--line)';
-    document.getElementById('optCargaExcel').style.background = 'white';
-    document.getElementById('optCargaImagen').style.borderColor = 'var(--line)';
-    document.getElementById('optCargaImagen').style.background = 'white';
-    document.getElementById('pasosCarga').style.display = 'none';
+    // Arranca siempre limpio: sin vista previa de una carga anterior
     document.getElementById('excelPreviewWrap').style.display = 'none';
     document.getElementById('excelFecha').value = '';
     document.getElementById('excelFile').value = '';
-  }
-}
-
-let tipoCargaElegido = null;
-function elegirTipoCarga(tipo){
-  tipoCargaElegido = tipo;
-  const optExcel = document.getElementById('optCargaExcel');
-  const optImagen = document.getElementById('optCargaImagen');
-  optExcel.style.borderColor = tipo==='excel' ? 'var(--magenta)' : 'var(--line)';
-  optExcel.style.background = tipo==='excel' ? 'var(--magenta-soft)' : 'white';
-  optImagen.style.borderColor = tipo==='imagen' ? 'var(--magenta)' : 'var(--line)';
-  optImagen.style.background = tipo==='imagen' ? 'var(--magenta-soft)' : 'white';
-
-  document.getElementById('pasosCarga').style.display = 'block';
-  document.getElementById('excelPreviewWrap').style.display = 'none';
-  document.getElementById('excelFile').value = '';
-  const inputArchivo = document.getElementById('excelFile');
-  const label = document.getElementById('labelArchivoCarga');
-  if(tipo==='excel'){
-    inputArchivo.accept = '.xlsx,.xls';
-    label.textContent = 'Selecciona el archivo Excel';
-  } else {
-    inputArchivo.accept = 'image/*';
-    label.textContent = 'Selecciona o toma la foto de la planilla';
-  }
-}
-
-async function ejecutarCarga(){
-  const boton = document.getElementById('btnCargarPaso');
-  if(tipoCargaElegido==='imagen'){
-    await conCarga(boton, 'Leyendo imagen con IA...', procesarImagenPlanilla);
-  } else {
-    await conCarga(boton, 'Leyendo Excel...', procesarExcelDesdeInput);
   }
 }
 
@@ -1779,7 +1726,6 @@ function procesarExcelDesdeInput(){
           if(obj.ocCliente) excelParsedRows.push(obj);
         }
 
-        document.getElementById('previewIntroImagen').style.display = 'none';
         pintarPreviewExcel();
       } catch(err){
         showToast('Error leyendo el archivo: '+err.message);
@@ -1787,55 +1733,6 @@ function procesarExcelDesdeInput(){
       resolve();
     };
     reader.readAsArrayBuffer(file);
-  });
-}
-
-// Lee la foto de la planilla con IA (Gemini) y la organiza en las mismas filas/columnas que usa el Excel,
-// para que después se confirme y se cargue exactamente igual.
-function procesarImagenPlanilla(){
-  return new Promise((resolve)=>{
-    const file = document.getElementById('excelFile').files[0];
-    if(!file){ showToast('⚠ Selecciona o toma una foto primero.'); resolve(); return; }
-
-    const fechaSeleccionada = document.getElementById('excelFecha').value;
-    if(!fechaSeleccionada){
-      showToast('⚠ Primero indica para qué día es esta planilla.');
-      resolve();
-      return;
-    }
-    const fechaFormateada = fechaSeleccionada.split('-').reverse().join('/');
-
-    const reader = new FileReader();
-    reader.onload = async function(e){
-      try{
-        const base64Completo = e.target.result; // "data:image/jpeg;base64,AAAA..."
-        const base64Puro = base64Completo.split(',')[1];
-        const data = await llamarAPI({ accion:'leerImagenPlanilla', imagenBase64: base64Puro, mimeType: file.type || 'image/jpeg' });
-
-        if(!data.ok){ showToast('Error leyendo la imagen: '+data.error); resolve(); return; }
-
-        excelParsedRows = data.filas.map(f => ({
-          empresa: currentCompany,
-          fecha: fechaFormateada,
-          ocCliente: f.ocCliente || '',
-          pvt: f.pvt || '',
-          cliente: f.cliente || '',
-          referencia: f.referencia || '',
-          ciudad: f.ciudad || '',
-          cantidad: (f.cantidad === '' || f.cantidad === undefined || f.cantidad === null) ? 'Abierta' : f.cantidad,
-          notas: f.notas || ''
-        })).filter(f => f.ocCliente);
-
-        if(excelParsedRows.length === 0){ showToast('No se reconoció ninguna fila válida en la imagen.'); resolve(); return; }
-
-        document.getElementById('previewIntroImagen').style.display = 'block';
-        pintarPreviewExcel();
-      } catch(err){
-        showToast('Error leyendo la imagen: '+err.message);
-      }
-      resolve();
-    };
-    reader.readAsDataURL(file);
   });
 }
 
