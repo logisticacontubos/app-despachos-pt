@@ -192,13 +192,13 @@
       <div><h1>Control de Despachos</h1><div class="who">Producto Terminado</div></div>
     </div>
     <div class="company-toggle">
-      <button id="btn-contubos" onclick="setCompany('Contubos')">Contubos</button>
-      <button id="btn-tecnipapel" onclick="setCompany('Tecnipapel')">Tecnipapel</button>
+      <button id="btn-contubos" onclick="conCarga(this, 'Cambiando...', ()=>setCompany('Contubos'))">Contubos</button>
+      <button id="btn-tecnipapel" onclick="conCarga(this, 'Cambiando...', ()=>setCompany('Tecnipapel'))">Tecnipapel</button>
     </div>
     <div class="user-pill">
       <span class="dot"></span>
       <span id="userLabel"></span>
-      <button onclick="refrescarTodo()" title="Actualizar datos">🔄</button>
+      <button onclick="conCarga(this, '', refrescarTodo)" title="Actualizar datos">🔄</button>
       <button onclick="logout()">Salir</button>
     </div>
   </header>
@@ -316,7 +316,7 @@
         <div id="futuroMenu" style="display:none;position:absolute;right:0;top:40px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px;min-width:190px;z-index:20;"></div>
       </div>
       <button class="upload-btn" id="btnHistorial" onclick="toggleHistorialPanel()">🕘 Historial</button>
-      <button class="upload-btn" id="btnAlistamiento" onclick="toggleAlistamiento()" style="display:none;border-color:var(--ok);color:var(--ok);">📋 Alistamiento</button>
+      <button class="upload-btn" id="btnAlistamiento" onclick="conCarga(this, 'Cargando...', toggleAlistamiento)" style="display:none;border-color:var(--ok);color:var(--ok);">📋 Alistamiento</button>
     </div>
   </div>
 
@@ -963,6 +963,7 @@ function renderAlistamiento(list){
           <button onclick="marcarAlistamiento('${key}','Incompleto')" style="flex:1;min-width:100px;border:1.5px solid var(--line);background:${estado==='Incompleto'?'var(--warn)':'white'};color:${estado==='Incompleto'?'white':'var(--ink-soft)'};border-color:${estado==='Incompleto'?'var(--warn)':'var(--line)'};padding:9px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">⚠️ Incompleto</button>
           <button onclick="marcarAlistamiento('${key}','Sin_Existencia')" style="flex:1;min-width:100px;border:1.5px solid var(--line);background:${estado==='Sin_Existencia'?'var(--danger)':'white'};color:${estado==='Sin_Existencia'?'white':'var(--ink-soft)'};border-color:${estado==='Sin_Existencia'?'var(--danger)':'var(--line)'};padding:9px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">❌ No hay ninguna</button>
         </div>
+        <div id="guardando-${key}" style="display:none;font-size:11px;color:var(--ink-soft);margin-top:6px;"><span class="spinner" style="border-color:rgba(43,43,43,0.25);border-top-color:var(--ink-soft);"></span>Guardando...</div>
         ${estado==='Incompleto' && !esAbierta ? `
           <div style="margin-top:10px;">
             <label style="display:block;font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:5px;">Pedido solicita: <strong>${total.toLocaleString()} unds</strong> — ¿cuántas hay disponibles?</label>
@@ -1000,7 +1001,10 @@ async function marcarAlistamiento(idPedido, estado){
   const payload = { accion:'registrarAlistamiento', idPedido, empresa: currentCompany, fecha: fechaHoyTexto(), estado, cantidadDisponible: disponible, cantidadFaltante: faltante, registradoPor: currentUser.nombre };
   alistamientoCache[idPedido] = { Estado_Alistamiento: estado, Cantidad_Disponible: disponible, Cantidad_Faltante: faltante };
   renderAlistamiento(list); // refleja al instante
+  const indicadorGuardando = document.getElementById('guardando-'+idPedido);
+  if(indicadorGuardando) indicadorGuardando.style.display = 'block';
   try{ await llamarAPI(payload); } catch(err){ showToast('Error guardando: '+err.message); }
+  finally { if(indicadorGuardando) indicadorGuardando.style.display = 'none'; }
 }
 
 function pintarFaltanteReal(idPedido, total, disponible){
@@ -1020,9 +1024,12 @@ function actualizarDisponibleReal(idPedido, total){
     const disponible = Number(val)||0;
     const faltante = Math.max(0, total - disponible);
     alistamientoCache[idPedido] = { Estado_Alistamiento:'Incompleto', Cantidad_Disponible: disponible, Cantidad_Faltante: faltante };
+    const indicadorGuardando = document.getElementById('guardando-'+idPedido);
+    if(indicadorGuardando) indicadorGuardando.style.display = 'block';
     try{
       await llamarAPI({ accion:'registrarAlistamiento', idPedido, empresa: currentCompany, fecha: fechaHoyTexto(), estado:'Incompleto', cantidadDisponible: disponible, cantidadFaltante: faltante, registradoPor: currentUser.nombre });
     } catch(err){ showToast('Error guardando: '+err.message); }
+    finally { if(indicadorGuardando) indicadorGuardando.style.display = 'none'; }
   }, 500); // espera a que termine de escribir antes de guardar
 }
 
@@ -1435,7 +1442,7 @@ async function pintarDetalle(idPedido){
               <option value="Pendiente entrada en sistema">Pendiente entrada en sistema</option>
             </select>
             <div id="novDetalle-${idPedido}" style="display:none;"><label>Describe qué sucedió</label><textarea id="novTexto-${idPedido}" rows="2"></textarea></div>
-            <button id="btnFinalizar-${idPedido}" onclick="registrarEntrega('${idPedido}')" style="background:var(--ok);">✅ Marcar como enviado</button>
+            <button id="btnFinalizar-${idPedido}" onclick="conCarga(this, 'Enviando...', ()=>registrarEntrega('${idPedido}'))" style="background:var(--ok);">✅ Marcar como enviado</button>
           </div>` : `<div class="readonly-note">Tu rol es de consulta — puedes ver el estado del pedido pero no registrar entregas.</div>`}
       </div>
     </div>`;
