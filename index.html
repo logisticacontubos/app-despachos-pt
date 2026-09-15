@@ -352,13 +352,25 @@ let noProgramadosCache = {};
 let entregasCache = {};
 let companyLocked = false;
 
-async function llamarAPI(payload){
-  const resp = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload)
-  });
-  return resp.json();
+async function llamarAPI(payload, intento){
+  intento = intento || 1;
+  try{
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    return await resp.json();
+  } catch(err){
+    // Apps Script a veces falla de forma pasajera (no por un error real, sino por inestabilidad
+    // momentánea de Google). Antes de rendirse y mostrar el error, reintenta un par de veces con
+    // una pequeña espera — muchas veces el segundo o tercer intento sí funciona.
+    if(intento < 3){
+      await new Promise(r => setTimeout(r, intento * 1200)); // espera un poco más en cada reintento
+      return llamarAPI(payload, intento + 1);
+    }
+    throw err;
+  }
 }
 function showToast(msg){
   const t = document.getElementById('toast');
