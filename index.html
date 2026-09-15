@@ -355,11 +355,21 @@ let companyLocked = false;
 async function llamarAPI(payload, intento){
   intento = intento || 1;
   try{
-    const resp = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    });
+    const json = JSON.stringify(payload);
+    let resp;
+    if(json.length < 6000){
+      // GET demostró ser mucho más confiable con este despliegue que POST — se manda igual,
+      // solo que el "cuerpo" va codificado como parámetro en la URL en vez de en el body.
+      resp = await fetch(API_URL + '?data=' + encodeURIComponent(json), { method: 'GET' });
+    } else {
+      // Para cargas grandes (ej. una planilla con muchas filas) sí hace falta POST, porque
+      // una URL no puede llevar tanto texto.
+      resp = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: json
+      });
+    }
     return await resp.json();
   } catch(err){
     // Apps Script a veces falla de forma pasajera (no por un error real, sino por inestabilidad
