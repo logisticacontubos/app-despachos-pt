@@ -580,10 +580,11 @@ async function setCompany(c){
 async function cargarPedidos(){
   document.getElementById('orderList').innerHTML = '<div class="loading">Cargando pedidos...</div>';
   try{
-    const [dataPedidos, dataNoProg] = await Promise.all([
-      llamarAPI({ accion:'getPedidos', empresa: currentCompany }),
-      llamarAPI({ accion:'getNoProgramados', empresa: currentCompany })
-    ]);
+    // Antes se pedían las dos cosas al mismo tiempo (Promise.all), pero Apps Script parece no llevar
+    // bien dos peticiones simultáneas al mismo script — una se quedaba esperando y terminaba en error.
+    // Pidiéndolas una detrás de otra es un poco más lento, pero mucho más confiable.
+    const dataPedidos = await llamarAPI({ accion:'getPedidos', empresa: currentCompany });
+    const dataNoProg = await llamarAPI({ accion:'getNoProgramados', empresa: currentCompany });
     if(dataPedidos.ok){
       pedidosCache[currentCompany] = dataPedidos.pedidos;
       noProgramadosCache[currentCompany] = dataNoProg.ok ? dataNoProg.noProgramados : [];
