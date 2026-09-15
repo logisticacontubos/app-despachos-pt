@@ -726,10 +726,21 @@ function toggleFuturoMenu(){
 let historialActivo = false;
 let alistamientoActivo = false;
 let alistamientoCache = {};
-function toggleHistorialPanel(){
+let historialPedidosCache = {}; // por empresa — se pide aparte, solo la primera vez que se abre Historial
+async function toggleHistorialPanel(){
   historialActivo = !historialActivo;
   document.getElementById('btnHistorial').classList.toggle('active', historialActivo);
   document.getElementById('futuroMenu').style.display = 'none';
+  if(historialActivo && !historialPedidosCache[currentCompany]){
+    document.getElementById('orderList').innerHTML = '<div class="loading">Cargando historial...</div>';
+    try{
+      const data = await llamarAPI({ accion:'getHistorialPedidos', empresa: currentCompany });
+      historialPedidosCache[currentCompany] = data.ok ? data.pedidos : [];
+    } catch(err){
+      historialPedidosCache[currentCompany] = [];
+      showToast('Error cargando historial: '+err.message);
+    }
+  }
   render();
 }
 function toggleUploadPanel(){
@@ -762,7 +773,9 @@ function renderHistorial(list){
   document.getElementById('futuroCount').textContent = '';
   document.getElementById('futuroMenu').style.display = 'none';
 
-  historialCompletadosCache = list.filter(o=>o.Estado==='Completado' || o.Estado==='Cerrado');
+  const historialAnterior = historialPedidosCache[currentCompany] || [];
+  const completadosHoy = list.filter(o=>o.Estado==='Completado' || o.Estado==='Cerrado');
+  historialCompletadosCache = [...completadosHoy, ...historialAnterior];
   const container = document.getElementById('orderList');
 
   if(historialCompletadosCache.length===0){
