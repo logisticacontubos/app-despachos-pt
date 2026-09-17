@@ -205,10 +205,12 @@ async function login(pin) {
 }
 
 // ---------- PEDIDOS ----------
-async function limpiarAbiertasPapelesNacionalesVencidas() {
-  const todos = await sheetToObjects('Pedidos');
+// Recibe la lista ya leída de Pedidos, borra las que aplican, y avisa si borró algo (para que
+// quien llama sepa si necesita volver a leer la hoja o puede seguir usando la lista que ya tiene).
+async function limpiarAbiertasPapelesNacionalesVencidas(todos) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
+  let borroAlgo = false;
 
   for (const p of todos) {
     const cliente = String(p.Razon_Social_Cliente || '').toUpperCase();
@@ -221,13 +223,20 @@ async function limpiarAbiertasPapelesNacionalesVencidas() {
     if (!fechaPedido) continue;
     if (fechaPedido.getTime() < hoy.getTime()) {
       await eliminarFila('Pedidos', p._rowIndex);
+      borroAlgo = true;
     }
   }
+  return borroAlgo;
 }
 
 async function getPedidos(empresa) {
-  await limpiarAbiertasPapelesNacionalesVencidas();
-  const todos = (await sheetToObjects('Pedidos')).filter(p => p.Empresa === empresa);
+  // Una sola lectura de la hoja, reutilizada tanto para la limpieza como para armar la respuesta
+  // (antes se leía dos veces seguidas, lo cual sumaba tiempo de espera innecesario).
+  let todosSinFiltrar = await sheetToObjects('Pedidos');
+  const borroAlgo = await limpiarAbiertasPapelesNacionalesVencidas(todosSinFiltrar);
+  if (borroAlgo) todosSinFiltrar = await sheetToObjects('Pedidos'); // solo se vuelve a leer si de verdad borró algo
+
+  const todos = todosSinFiltrar.filter(p => p.Empresa === empresa);
   const hoy = hoyTexto();
   const pedidos = todos.filter(p => {
     if (p.Estado !== 'Completado' && p.Estado !== 'Cerrado') return true;
