@@ -181,6 +181,7 @@ module.exports = async (req, res) => {
       case 'editarPedido': resultado = await editarPedido(body); break;
       case 'eliminarPedido': resultado = await eliminarPedido(body.idPedido); break;
       case 'cerrarPedido': resultado = await cerrarPedido(body); break;
+      case 'getConductores': resultado = await getConductores(); break;
       case 'getAlistamiento': resultado = await getAlistamiento(body.empresa, body.fecha); break;
       case 'registrarAlistamiento': resultado = await registrarAlistamiento(body); break;
       default:
@@ -440,6 +441,25 @@ async function cargarPlanilla(body) {
 }
 
 // ---------- ALISTAMIENTO ----------
+// Lista de conductores/transportadores para el desplegable de la app.
+// Lee la hoja "Conductores" (columnas: Nombre, Activo). Si Activo está vacío se cuenta como activo.
+// Si la hoja no existe o falla la lectura, devuelve lista vacía y la app usa su lista de respaldo.
+async function getConductores() {
+  try {
+    const filas = await sheetToObjects('Conductores');
+    const nombres = filas
+      .filter(f => String(f.Nombre || '').trim() !== '')
+      .filter(f => {
+        const a = String(f.Activo === undefined ? '' : f.Activo).trim().toUpperCase();
+        return a === '' || a === 'TRUE' || a === 'SI' || a === 'SÍ' || a === 'VERDADERO';
+      })
+      .map(f => String(f.Nombre).trim());
+    return { ok: true, conductores: nombres };
+  } catch (err) {
+    return { ok: true, conductores: [] };
+  }
+}
+
 async function getAlistamiento(empresa, fecha) {
   const registros = (await sheetToObjects('Alistamiento')).filter(a => a.Empresa === empresa && a.Fecha_Revision === fecha);
   const porPedido = {};
