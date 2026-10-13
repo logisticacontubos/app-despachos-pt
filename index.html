@@ -369,6 +369,7 @@
     <div id="viewingSub" class="page-sub"></div>
     <div id="subChips" class="chips2"></div>
     <div id="orderList"><div class="loading">Cargando pedidos...</div></div>
+    <div style="text-align:center;font-size:10px;color:#B5B1A9;margin:18px 0 6px;">Versión 13-oct · 12:45</div>
   </div>
 </div>
 
@@ -449,30 +450,33 @@ const RAZONES_ATRASO = [
   ['Cliente pidió aplazar', 'Cliente aplazó'],
   ['Otro', 'Otro']
 ];
-function condHTML(base){
+function condHTML(base, pre){
+  const esRecoge = pre==='recoge';
   return `<select id="${base}" class="fld" onchange="condCambio('${base}')">
       <option value="">Selecciona…</option>
       ${CONDUCTORES.map(c=>`<option value="${c}">${c}</option>`).join('')}
+      <option value="__recoge" ${esRecoge?'selected':''}>Cliente recoge</option>
       <option value="__otro">Otro…</option>
     </select>
-    <input type="text" id="${base}-otro" class="fld" placeholder="Escribe el conductor / transportador" style="display:none;margin-top:6px;">
-    <input type="text" id="${base}-det" class="fld" placeholder="Nombre o placa (opcional)" style="margin-top:6px;">`;
+    <input type="text" id="${base}-recoge" class="fld" placeholder="Quién recoge (nombre y documento / placa)" style="display:${esRecoge?'block':'none'};margin-top:6px;">
+    <input type="text" id="${base}-otro" class="fld" placeholder="Escribe el conductor / transportador" style="display:none;margin-top:6px;">`;
 }
 function condCambio(base){
-  const sel = document.getElementById(base);
-  const otro = document.getElementById(base+'-otro');
-  otro.style.display = (sel.value==='__otro') ? 'block' : 'none';
-  if(sel.value==='__otro') otro.focus();
+  const v = document.getElementById(base).value;
+  document.getElementById(base+'-recoge').style.display = (v==='__recoge') ? 'block' : 'none';
+  document.getElementById(base+'-otro').style.display = (v==='__otro') ? 'block' : 'none';
+  if(v==='__recoge') document.getElementById(base+'-recoge').focus();
+  if(v==='__otro') document.getElementById(base+'-otro').focus();
 }
-// Devuelve el texto final: "Coordinadora - Juan Pérez". Si el campo es un texto simple (cliente recoge), lo devuelve tal cual.
+// Devuelve el texto final que se guarda en Sheets: "Coordinadora - Juan Pérez", "Cliente recoge - Juan Pérez, CC 123", o el nombre escrito en "Otro".
 function getConductor(base){
   const el = document.getElementById(base);
   if(!el) return '';
   if(el.tagName === 'INPUT') return el.value.trim();
-  const principal = (el.value==='__otro') ? document.getElementById(base+'-otro').value.trim() : el.value;
-  const detEl = document.getElementById(base+'-det');
-  const det = detEl ? detEl.value.trim() : '';
-  return [principal, det].filter(Boolean).join(' - ');
+  const val = (id)=>{ const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  if(el.value === '__recoge') return ['Cliente recoge', val(base+'-recoge')].filter(Boolean).join(' - ');
+  if(el.value === '__otro') return val(base+'-otro');
+  return el.value;
 }
 
 async function llamarAPI(payload, intento){
@@ -643,7 +647,11 @@ async function refrescarTodo(){
     try{
       entrarConUsuario(JSON.parse(guardada));
       resetVistaPrincipal();
-      cargarPedidos();
+      // Si el celular recargó la página (pasa al cambiar de app), vuelve a la misma empresa y pestaña donde estaba
+      let vista = {};
+      try{ vista = JSON.parse(sessionStorage.getItem('despachoPT_vista') || '{}'); }catch(e){}
+      if(!companyLocked && (vista.company==='Contubos' || vista.company==='Tecnipapel')){ currentCompany = vista.company; setUpCompanyButtons(); }
+      cargarPedidos().then(()=>{ if(vista.tab && vista.tab!=='hoy') setTab(vista.tab); });
     } catch(e){ localStorage.removeItem('despachoPT_sesion'); }
   }
 })();
@@ -666,13 +674,33 @@ function resetVistaPrincipal(){
   actualizarSelbar();
 }
 
-// En celular, volver a abrir la app casi nunca recarga la página de verdad — solo la retoma
-// donde estaba. Esto detecta cuando vuelve a quedar visible y la deja en la vista normal otra vez.
+// Al volver a la app (por ejemplo después de mirar WhatsApp) NO se reinicia la pantalla: se respeta lo que se estaba haciendo.
+// Solo si pasaron más de 10 minutos fuera, y no hay nada a medias (selección, formulario abierto, ventana), se actualizan los datos en silencio.
+let _ocultoDesde = 0;
+function guardarVista(){
+  try{ sessionStorage.setItem('despachoPT_vista', JSON.stringify({ tab, company: currentCompany })); }catch(e){}
+}
+async function refrescarSilencioso(){
+  try{
+    const [dp, dn] = await Promise.all([
+      llamarAPI({ accion:'getPedidos', empresa: currentCompany }),
+      llamarAPI({ accion:'getNoProgramados', empresa: currentCompany })
+    ]);
+    if(!dp.ok) return;
+    pedidosCache[currentCompany] = dp.pedidos;
+    noProgramadosCache[currentCompany] = dn.ok ? dn.noProgramados : [];
+    const algoAMedias = seleccionados.size>0 || document.querySelector('.order.open') || panelAbierto() ||
+      document.getElementById('overlaySeleccion').classList.contains('show') ||
+      document.getElementById('overlayNuevo').classList.contains('show') ||
+      (document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName));
+    if(!algoAMedias) render();
+  } catch(e){}
+}
 document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState === 'visible' && currentUser){
-    resetVistaPrincipal();
-    render();
-  }
+  if(!currentUser) return;
+  if(document.visibilityState === 'hidden'){ _ocultoDesde = Date.now(); return; }
+  if(_ocultoDesde && Date.now() - _ocultoDesde > 10*60*1000) refrescarSilencioso();
+  _ocultoDesde = 0;
 });
 function aplicarTemaEmpresa(){
   const esTecni = currentCompany==='Tecnipapel';
@@ -695,6 +723,7 @@ async function setCompany(c){
   currentCompany = c;
   resetVistaPrincipal();
   setUpCompanyButtons();
+  guardarVista();
   await cargarPedidos();
 }
 // ---------- CARGAR PEDIDOS ----------
@@ -804,6 +833,7 @@ async function setTab(t){
   historialActivo = (t==='his');
   alistamientoActivo = (t==='ali');
   window.scrollTo(0,0);
+  guardarVista();
 
   if(t==='his' && !historialPedidosCache[currentCompany]){
     mostrarCargando('🕘 Historial', 'Cargando historial...');
@@ -1516,8 +1546,8 @@ function pintarFormularioDespacho(o, canEdit, esAbierta, pendiente){
       <div class="qrow" id="chipsRazon-${idPedido}">${RAZONES_ATRASO.map(r=>`<span class="q" data-v="${r[0]}" onclick="elegirRazon('${idPedido}', this)">${r[1]}</span>`).join('')}</div>
       <div id="razonDetalleWrap-${idPedido}" style="display:none;margin-top:8px;"><textarea class="fld" id="razon-${idPedido}" placeholder="Explica brevemente qué pasó..."></textarea></div>
     </div>` : ''}
-    <label class="lbl">${recoge ? 'Quién recoge (nombre y documento/placa)' : 'Conductor / Transportador'}</label>
-    ${recoge ? `<input type="text" class="fld" id="transp-${idPedido}" placeholder="Ej: Juan Pérez, CC 123456 / placa ABC123">` : condHTML('transp-'+idPedido)}
+    <label class="lbl">Conductor / Transportador</label>
+    ${condHTML('transp-'+idPedido, recoge ? 'recoge' : '')}
     <label class="lbl">Cantidad despachada${esAbierta ? '' : ` <span style="font-weight:400;">(faltan ${pendiente.toLocaleString()})</span>`}</label>
     <div style="display:flex;gap:8px;">
       <input type="number" inputmode="numeric" class="fld" id="cant-${idPedido}" placeholder="Cantidad" style="flex:1;" oninput="verificarCantidad('${idPedido}', ${esAbierta ? 'null' : pendiente})">
