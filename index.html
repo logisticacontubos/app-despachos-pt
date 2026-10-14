@@ -369,7 +369,7 @@
     <div id="viewingSub" class="page-sub"></div>
     <div id="subChips" class="chips2"></div>
     <div id="orderList"><div class="loading">Cargando pedidos...</div></div>
-    <div style="text-align:center;font-size:10px;color:#B5B1A9;margin:18px 0 6px;">Versión 13-oct · 12:45</div>
+    <div style="text-align:center;font-size:10px;color:#B5B1A9;margin:18px 0 6px;">Versión 14-oct · 08:30</div>
   </div>
 </div>
 
@@ -1033,15 +1033,17 @@ function renderAlistamiento(list){
   const completos = pendientes.filter(o=>alistamientoCache[o.ID_Pedido]?.Estado_Alistamiento==='Completo').length;
   const incompletos = pendientes.filter(o=>alistamientoCache[o.ID_Pedido]?.Estado_Alistamiento==='Incompleto').length;
   const sinExistencia = pendientes.filter(o=>alistamientoCache[o.ID_Pedido]?.Estado_Alistamiento==='Sin_Existencia').length;
-  const sinRevisar = pendientes.length - completos - incompletos - sinExistencia;
+  const demas = pendientes.filter(o=>alistamientoCache[o.ID_Pedido]?.Estado_Alistamiento==='Unidades_Demas').length;
+  const sinRevisar = pendientes.length - completos - incompletos - sinExistencia - demas;
 
   const canEdit = currentUser.rol !== 'Consulta';
 
   container.innerHTML = `
-    <div class="stats" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px;">
+    <div class="stats" style="grid-template-columns:repeat(5,1fr);margin-bottom:18px;">
       <div class="stat-card"><div class="label">Completos</div><div class="value" style="color:var(--ok);">${completos}</div></div>
       <div class="stat-card"><div class="label">Incompletos</div><div class="value" style="color:var(--warn);">${incompletos}</div></div>
       <div class="stat-card"><div class="label">Sin existencia</div><div class="value" style="color:var(--danger);">${sinExistencia}</div></div>
+      <div class="stat-card"><div class="label">Unidades de más</div><div class="value" style="color:#1B6FBF;">${demas}</div></div>
       <div class="stat-card"><div class="label">Sin revisar</div><div class="value" style="color:var(--ink-soft);">${sinRevisar}</div></div>
     </div>
     <div id="listaAlistamiento"></div>
@@ -1055,8 +1057,8 @@ function renderAlistamiento(list){
     const disponible = reg ? reg.Cantidad_Disponible : '';
     const total = Number(o.Cantidad_Total)||0;
     const esAbierta = String(o.Cantidad_Total).trim().toLowerCase()==='abierta';
-    const estadoLabel = { Completo:'Completo', Incompleto:'Incompleto', Sin_Existencia:'Sin existencia' };
-    const estadoClase = estado==='Completo' ? 'status-Completado' : estado==='Incompleto' ? 'status-flag-atrasado' : estado==='Sin_Existencia' ? 'status-Atrasado' : '';
+    const estadoLabel = { Completo:'Completo', Incompleto:'Incompleto', Sin_Existencia:'Sin existencia', Unidades_Demas:'Unidades de más' };
+    const estadoClase = estado==='Completo' ? 'status-Completado' : estado==='Incompleto' ? 'status-flag-atrasado' : estado==='Sin_Existencia' ? 'status-Atrasado' : estado==='Unidades_Demas' ? 'status-Parcial' : '';
     return `
     <div class="order" style="padding:16px 18px;margin-bottom:10px;" id="alist-${key}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px;">
@@ -1072,6 +1074,7 @@ function renderAlistamiento(list){
           <button onclick="marcarAlistamiento('${key}','Completo')" style="flex:1;min-width:100px;border:1.5px solid var(--line);background:${estado==='Completo'?'var(--ok)':'white'};color:${estado==='Completo'?'white':'var(--ink-soft)'};border-color:${estado==='Completo'?'var(--ok)':'var(--line)'};padding:9px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✅ Completo</button>
           <button onclick="marcarAlistamiento('${key}','Incompleto')" style="flex:1;min-width:100px;border:1.5px solid var(--line);background:${estado==='Incompleto'?'var(--warn)':'white'};color:${estado==='Incompleto'?'white':'var(--ink-soft)'};border-color:${estado==='Incompleto'?'var(--warn)':'var(--line)'};padding:9px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">⚠️ Incompleto</button>
           <button onclick="marcarAlistamiento('${key}','Sin_Existencia')" style="flex:1;min-width:100px;border:1.5px solid var(--line);background:${estado==='Sin_Existencia'?'var(--danger)':'white'};color:${estado==='Sin_Existencia'?'white':'var(--ink-soft)'};border-color:${estado==='Sin_Existencia'?'var(--danger)':'var(--line)'};padding:9px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">❌ No hay ninguna</button>
+          <button onclick="marcarAlistamiento('${key}','Unidades_Demas')" style="flex:1;min-width:100px;border:1.5px solid var(--line);background:${estado==='Unidades_Demas'?'#1B6FBF':'white'};color:${estado==='Unidades_Demas'?'white':'var(--ink-soft)'};border-color:${estado==='Unidades_Demas'?'#1B6FBF':'var(--line)'};padding:9px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">➕ Unidades de más</button>
         </div>
         <div id="guardando-${key}" style="display:none;font-size:11px;color:var(--ink-soft);margin-top:6px;"><span class="spinner" style="border-color:rgba(43,43,43,0.25);border-top-color:var(--ink-soft);"></span>Guardando...</div>
         ${estado==='Incompleto' && !esAbierta ? `
@@ -1081,8 +1084,16 @@ function renderAlistamiento(list){
             <div id="faltanteReal-${key}" style="margin-top:8px;"></div>
           </div>
         ` : ''}
+        ${estado==='Unidades_Demas' && !esAbierta ? `
+          <div style="margin-top:10px;">
+            <label style="display:block;font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:5px;">Pedido solicita: <strong>${total.toLocaleString()} unds</strong> — ¿cuántas unidades de más hay?</label>
+            <input type="number" inputmode="numeric" id="demas-${key}" value="${disponible!=='' && disponible!==undefined ? Math.max(0, Number(disponible)-total) : ''}" placeholder="Ej: 50" oninput="actualizarUnidadesDemas('${key}', ${total})" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit;">
+            <div id="faltanteReal-${key}" style="margin-top:8px;"></div>
+          </div>
+        ` : ''}
       ` : `<div class="readonly-note">
           ${estado==='Incompleto' && !esAbierta ? `Incompleto — hay <strong>${Number(disponible).toLocaleString()}</strong> de <strong>${total.toLocaleString()}</strong> solicitadas, faltan <strong>${Math.max(0,total-Number(disponible)).toLocaleString()}</strong>` :
+            estado==='Unidades_Demas' ? (esAbierta ? 'Unidades de más' : `Unidades de más — hay <strong>${Number(disponible).toLocaleString()}</strong> de <strong>${total.toLocaleString()}</strong> solicitadas, sobran <strong>${Math.max(0,Number(disponible)-total).toLocaleString()}</strong>`) :
             estado==='Sin_Existencia' ? `Sin existencia — 0 de ${esAbierta?'cantidad abierta':total.toLocaleString()+' unds solicitadas'}` :
             estado==='Completo' ? `Completo — ${esAbierta?'cantidad abierta':total.toLocaleString()+' unds'}` :
             'Aún sin revisar'}
@@ -1096,6 +1107,9 @@ function renderAlistamiento(list){
     if(reg && reg.Estado_Alistamiento==='Incompleto' && reg.Cantidad_Disponible!==''){
       pintarFaltanteReal(o.ID_Pedido, Number(o.Cantidad_Total)||0, Number(reg.Cantidad_Disponible));
     }
+    if(reg && reg.Estado_Alistamiento==='Unidades_Demas' && reg.Cantidad_Disponible!=='' && reg.Cantidad_Disponible!==undefined){
+      pintarSobrantes(o.ID_Pedido, Math.max(0, Number(reg.Cantidad_Disponible) - (Number(o.Cantidad_Total)||0)));
+    }
   });
 }
 
@@ -1105,8 +1119,8 @@ async function marcarAlistamiento(idPedido, estado){
   if(!o) return;
   const total = Number(o.Cantidad_Total)||0;
   const reg = alistamientoCache[idPedido];
-  const disponible = (estado==='Incompleto' && reg) ? reg.Cantidad_Disponible : (estado==='Sin_Existencia' ? 0 : (estado==='Completo' ? total : ''));
-  const faltante = estado==='Sin_Existencia' ? total : (estado==='Completo' ? 0 : '');
+  const disponible = ((estado==='Incompleto' || estado==='Unidades_Demas') && reg && reg.Estado_Alistamiento===estado) ? reg.Cantidad_Disponible : (estado==='Sin_Existencia' ? 0 : (estado==='Completo' ? total : ''));
+  const faltante = estado==='Sin_Existencia' ? total : ((estado==='Completo' || estado==='Unidades_Demas') ? 0 : '');
 
   const payload = { accion:'registrarAlistamiento', idPedido, empresa: currentCompany, fecha: fechaHoyTexto(), estado, cantidadDisponible: disponible, cantidadFaltante: faltante, registradoPor: currentUser.nombre };
   alistamientoCache[idPedido] = { Estado_Alistamiento: estado, Cantidad_Disponible: disponible, Cantidad_Faltante: faltante };
@@ -1123,6 +1137,30 @@ function pintarFaltanteReal(idPedido, total, disponible){
   if(disponible==='' || isNaN(disponible)){ el.innerHTML=''; return; }
   const faltan = Math.max(0, total - disponible);
   el.innerHTML = `<div style="font-size:12.5px;font-weight:700;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:8px 10px;">Faltan <strong>${faltan.toLocaleString()}</strong> unds</div>`;
+}
+
+function pintarSobrantes(idPedido, sobran){
+  const el = document.getElementById('faltanteReal-'+idPedido);
+  if(!el) return;
+  el.innerHTML = `<div style="font-size:12.5px;font-weight:700;color:#1B6FBF;background:#E7F0FB;border-radius:8px;padding:8px 10px;">Sobran <strong>${sobran.toLocaleString()}</strong> unds</div>`;
+}
+let _demasTimer;
+function actualizarUnidadesDemas(idPedido, total){
+  const val = document.getElementById('demas-'+idPedido).value;
+  if(val===''){ const el = document.getElementById('faltanteReal-'+idPedido); if(el) el.innerHTML=''; }
+  else pintarSobrantes(idPedido, Math.max(0, Number(val)||0));
+  clearTimeout(_demasTimer);
+  _demasTimer = setTimeout(async ()=>{
+    const extra = Math.max(0, Number(val)||0);
+    const disponible = total + extra;   // lo que hay en total = lo solicitado + lo que sobra
+    alistamientoCache[idPedido] = { Estado_Alistamiento:'Unidades_Demas', Cantidad_Disponible: disponible, Cantidad_Faltante: 0 };
+    const indicadorGuardando = document.getElementById('guardando-'+idPedido);
+    if(indicadorGuardando) indicadorGuardando.style.display = 'block';
+    try{
+      await llamarAPI({ accion:'registrarAlistamiento', idPedido, empresa: currentCompany, fecha: fechaHoyTexto(), estado:'Unidades_Demas', cantidadDisponible: disponible, cantidadFaltante: 0, registradoPor: currentUser.nombre });
+    } catch(err){ showToast('Error guardando: '+err.message); }
+    finally { if(indicadorGuardando) indicadorGuardando.style.display = 'none'; }
+  }, 500);
 }
 
 let _alistTimer;
@@ -1147,7 +1185,7 @@ function enviarReporteAlistamiento(){
   const list = pedidosCache[currentCompany]||[];
   const pendientes = list.filter(o=>o.Estado!=='Completado' && o.Estado!=='Cerrado' && dayCategory(o)==='hoy');
   const fecha = fechaHoyTexto();
-  const iconos = { Completo:'✅', Incompleto:'⚠️', Sin_Existencia:'❌' };
+  const iconos = { Completo:'✅', Incompleto:'⚠️', Sin_Existencia:'❌', Unidades_Demas:'➕' };
 
   let texto = `*Reporte de Alistamiento — ${currentCompany}*\n📅 ${fecha}\n👤 Enviado por: ${currentUser.nombre}\n\n`;
   pendientes.forEach(o=>{
@@ -1163,6 +1201,9 @@ function enviarReporteAlistamiento(){
     } else if(estado==='Incompleto'){
       const disp = Number(reg.Cantidad_Disponible)||0;
       texto += ` — Hay ${disp.toLocaleString()} de ${total.toLocaleString()}, faltan ${Math.max(0,total-disp).toLocaleString()}`;
+    } else if(estado==='Unidades_Demas'){
+      const disp = Number(reg.Cantidad_Disponible)||0;
+      texto += (esAbierta || !disp) ? ` — unidades de más` : ` — Hay ${disp.toLocaleString()} de ${total.toLocaleString()}, sobran ${Math.max(0,disp-total).toLocaleString()} (unidades de más)`;
     } else if(estado==='Sin_Existencia'){
       texto += ` — ${totalTxt}, 0 disponibles (sin existencia)`;
     } else {
